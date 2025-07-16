@@ -1,0 +1,39 @@
+include README.md
+include LICENSE
+include requirements.txt
+include setup.py
+include MANIFEST.in
+
+# ドキュメント
+recursive-include docs *.md
+
+# 設定ファイル
+recursive-include config *.json
+
+# 例
+recursive-include examples *.py
+
+# ソースコード
+recursive-include src *.py
+
+# テストファイル（開発時のみ）
+recursive-include tests *.py
+
+# データファイル（もしあれば）
+recursive-include data *.wav *.mp3 *.mp4
+
+# その他の重要ファイル
+include pyproject.toml
+include uv.lock
+
+# 除外するファイル
+global-exclude *.pyc
+global-exclude *.pyo
+global-exclude *.pyd
+global-exclude __pycache__
+global-exclude .git*
+global-exclude .DS_Store
+global-exclude *.so
+global-exclude *.dylib
+global-exclude *.db
+global-exclude *.log

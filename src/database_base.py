@@ -1,0 +1,127 @@
+"""
+データベースバックエンドの基底クラスとデータ構造
+
+音声指紋用データベースの共通インターフェースを定義
+"""
+
+from abc import ABC, abstractmethod
+from typing import List, Optional, Dict, Any, Tuple
+import logging
+from dataclasses import dataclass
+
+
+@dataclass
+class Fingerprint:
+    """音声フィンガープリントハッシュを表現"""
+    hash_value: str
+    time_offset: float
+    song_id: Optional[str] = None
+
+
+@dataclass
+class Song:
+    """データベース内の楽曲を表現"""
+    id: str
+    title: str
+    artist: str
+    file_path: str
+    created_at: Optional[str] = None
+
+
+@dataclass
+class DatabaseConfig:
+    """データベース接続設定"""
+    backend: str  # 'sqlite', 'mysql', 'postgres', 'elasticsearch'
+    host: Optional[str] = None
+    port: Optional[int] = None
+    database: Optional[str] = None
+    username: Optional[str] = None
+    password: Optional[str] = None
+    file_path: Optional[str] = None  # SQLite用
+    
+    # Elasticsearch固有の設定
+    index_name: Optional[str] = None
+    ca_certs: Optional[str] = None
+    verify_certs: bool = True
+    
+    # Elasticsearchインデックス設定
+    es_songs_shards: int = 1
+    es_songs_replicas: int = 0
+    es_fingerprints_shards: int = 3
+    es_fingerprints_replicas: int = 0
+    
+    # 接続プール設定
+    pool_size: int = 5
+    pool_timeout: int = 30
+
+
+class DatabaseBackend(ABC):
+    """データベースバックエンドの抽象基底クラス"""
+    
+    def __init__(self, config: DatabaseConfig):
+        self.config = config
+        self.logger = logging.getLogger(__name__)
+    
+    @abstractmethod
+    def connect(self) -> bool:
+        """データベースに接続"""
+        pass
+    
+    @abstractmethod
+    def disconnect(self) -> None:
+        """データベースから切断"""
+        pass
+    
+    @abstractmethod
+    def create_tables(self) -> bool:
+        """必要なテーブル/インデックスを作成"""
+        pass
+    
+    @abstractmethod
+    def add_song(self, song: Song) -> bool:
+        """楽曲を追加"""
+        pass
+    
+    @abstractmethod
+    def add_fingerprints(self, song_id: str, fingerprints: List[Fingerprint]) -> bool:
+        """フィンガープリントを追加"""
+        pass
+    
+    @abstractmethod
+    def search_fingerprints(self, query_fingerprints: List[Fingerprint]) -> Dict[str, List[Tuple[float, float]]]:
+        """フィンガープリントを検索"""
+        pass
+    
+    @abstractmethod
+    def get_song(self, song_id: str) -> Optional[Song]:
+        """楽曲情報を取得"""
+        pass
+    
+    @abstractmethod
+    def list_songs(self) -> List[Song]:
+        """全楽曲をリスト表示"""
+        pass
+    
+    @abstractmethod
+    def get_database_stats(self) -> Dict[str, int]:
+        """データベース統計を取得"""
+        pass
+    
+    @abstractmethod
+    def delete_song(self, song_id: str) -> bool:
+        """楽曲を削除"""
+        pass
+
+    @abstractmethod
+    def get_fingerprints_by_song(self, song_id: str) -> List[Fingerprint]:
+        """指定した楽曲のフィンガープリントを取得"""
+        pass
+
+
+# エクスポートするシンボルを定義
+__all__ = [
+    'Fingerprint',
+    'Song',
+    'DatabaseConfig',
+    'DatabaseBackend'
+]
