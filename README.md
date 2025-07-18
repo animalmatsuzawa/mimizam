@@ -117,7 +117,6 @@ mimizam/
 │   ├── fingerprint_database.py       # Database management
 │   ├── database_backends.py          # Unified backend
 │   ├── adaptive_parameters.py        # Adaptive parameter adjustment
-│   ├── parallel_processing.py        # Parallel processing support
 │   └── backends/                     # Individual backend implementations
 ├── examples/
 │   ├── mimizam_demo.py               # API demo

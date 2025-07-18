@@ -118,7 +118,6 @@ mimizam/
 │   ├── fingerprint_database.py       # データベース管理
 │   ├── database_backends.py          # 統一バックエンド
 │   ├── adaptive_parameters.py        # 適応パラメータ調整
-│   ├── parallel_processing.py        # 並列処理サポート
 │   └── backends/                     # 個別バックエンド実装
 ├── examples/
 │   ├── mimizam_demo.py               # APIデモ
