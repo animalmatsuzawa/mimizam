@@ -119,15 +119,15 @@ class SpectrogramAnalyzer:
         self._numba_compiled = False
         
         if self.enable_numba_optimization:
-            logging.info("Numba有効")
+            logging.info("Numba enabled")
             # 初期化時に事前コンパイルを実行
             self._ensure_numba_compiled()
         else:
             if not NUMBA_AVAILABLE:
-                logging.info("Numba未対応")
+                logging.info("Numba not supported")
             else:
-                logging.info("Numba無効")
-    
+                logging.info("Numba disabled")
+
     def generate_spectrogram(self, audio: np.ndarray, audible_only: bool = False) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         音声信号からスペクトログラムを生成
@@ -178,7 +178,7 @@ class SpectrogramAnalyzer:
         _ = _numba_optimized_peak_detection(dummy_data, dummy_mask, dummy_distance)
         
         self._numba_compiled = True
-        logging.info("Numba JITコンパイル完了")
+        logging.info("Numba JIT compilation complete")
     
     def _check_threshold_and_adapt(self, magnitude: np.ndarray, min_amplitude: float, debug: bool) -> Tuple[np.ndarray, float]:
         """閾値をチェックし、必要に応じて適応的に調整"""
@@ -252,7 +252,7 @@ class SpectrogramAnalyzer:
         """
         スペクトログラム内の局所最大値を検出
         
-        Numba最適化対応版（60x高速化）
+        Numba最適化対応
         """
         logger = logging.getLogger(__name__)
         
@@ -273,13 +273,13 @@ class SpectrogramAnalyzer:
             ]
             
             if debug:
-                logger.info("Numba使用（修正版）")
+                logger.info("use Numba:")
                 logger.info(f"Detected peaks: {len(peaks)}")
                 if len(peaks) > 0:
                     amplitudes = [p.amplitude for p in peaks]
                     logger.info(f"Peak amplitude range: {np.min(amplitudes):.2f} to {np.max(amplitudes):.2f} dB")
         else:
-            # peak_local_max版（100%一致保証）
+            # peak_local_max版
             coords = peak_local_max(
                 magnitude,
                 min_distance=peak_neighborhood_size,
