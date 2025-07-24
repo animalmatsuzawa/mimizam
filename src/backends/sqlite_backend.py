@@ -2,6 +2,7 @@
 
 from typing import List, Optional, Dict, Tuple
 from ..database_base import DatabaseBackend, DatabaseConfig, Song, Fingerprint
+import json
 
 try:
     import sqlite3
@@ -63,6 +64,7 @@ class SQLiteBackend(DatabaseBackend):
                     title TEXT NOT NULL,
                     artist TEXT NOT NULL,
                     file_path TEXT NOT NULL,
+                    meta TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
@@ -110,10 +112,11 @@ class SQLiteBackend(DatabaseBackend):
         """SQLiteに楽曲を追加"""
         try:
             cursor = self.connection.cursor()
+            meta_json = json.dumps(song.meta, ensure_ascii=False) if song.meta else None
             cursor.execute("""
-                INSERT OR REPLACE INTO songs (id, title, artist, file_path)
-                VALUES (?, ?, ?, ?)
-            """, (song.id, song.title, song.artist, song.file_path))
+                INSERT OR REPLACE INTO songs (id, title, artist, file_path, meta)
+                VALUES (?, ?, ?, ?, ?)
+            """, (song.id, song.title, song.artist, song.file_path, meta_json))
             self.connection.commit()
             return True
         except Exception as e:
@@ -188,14 +191,20 @@ class SQLiteBackend(DatabaseBackend):
         try:
             cursor = self.connection.cursor()
             cursor.execute("""
-                SELECT id, title, artist, file_path, created_at
+                SELECT id, title, artist, file_path, created_at, meta
                 FROM songs
                 WHERE id = ?
             """, (song_id,))
             
             row = cursor.fetchone()
             if row:
-                return Song(*row)
+                meta = None
+                if row[5]:
+                    try:
+                        meta = json.loads(row[5])
+                    except Exception:
+                        meta = None
+                return Song(id=row[0], title=row[1], artist=row[2], file_path=row[3], created_at=row[4], meta=meta)
         except Exception as e:
             self.logger.error(f"SQLite song retrieval error: {e}")
         
@@ -207,13 +216,19 @@ class SQLiteBackend(DatabaseBackend):
         try:
             cursor = self.connection.cursor()
             cursor.execute("""
-                SELECT id, title, artist, file_path, created_at
+                SELECT id, title, artist, file_path, created_at, meta
                 FROM songs
                 ORDER BY title, artist
             """)
             
             for row in cursor.fetchall():
-                songs.append(Song(*row))
+                meta = None
+                if row[5]:
+                    try:
+                        meta = json.loads(row[5])
+                    except Exception:
+                        meta = None
+                songs.append(Song(id=row[0], title=row[1], artist=row[2], file_path=row[3], created_at=row[4], meta=meta))
         except Exception as e:
             self.logger.error(f"SQLite song list retrieval error: {e}")
         

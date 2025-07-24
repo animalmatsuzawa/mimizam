@@ -20,11 +20,63 @@ from mimizam import Fingerprint
 from mimizam import create_mimizam_elasticsearch
 sys.path.append(os.path.dirname(__file__))
 from test_utils import TestAudioMixin
+import json
 
 
 @unittest.skipUnless(TESTCONTAINERS_AVAILABLE, "Testcontainersが利用できません")
 class TestElasticsearchContainers(TestAudioMixin, unittest.TestCase):
     """Elasticsearchコンテナテストと統合テスト"""
+
+    def test_add_song_with_meta(self):
+        """meta情報付き楽曲追加・取得テスト（Elasticsearch）"""
+        meta = {"genre": "electro", "year": 2027, "tags": ["elasticsearch", "meta"]}
+        with ElasticSearchContainer("elasticsearch:8.11.0").with_env(
+            "discovery.type", "single-node"
+        ).with_env(
+            "xpack.security.enabled", "false"
+        ).with_env(
+            "xpack.security.http.ssl.enabled", "false"
+        ).with_env(
+            "ES_JAVA_OPTS", "-Xms512m -Xmx512m"
+        ) as elasticsearch:
+            es_host = elasticsearch.get_container_host_ip()
+            es_port = elasticsearch.get_exposed_port(9200)
+
+            # Elasticsearchが利用可能になるまで待機
+            if not self._wait_for_elasticsearch(es_host, es_port):
+                self.skipTest("Elasticsearchの起動に失敗しました")
+            
+            elasticsearch_config = {
+                'host': es_host,
+                'port': es_port,
+                'index_name': 'mimizam_integration_test'
+            }
+            
+            # Mimizamインスタンスを作成
+            mimizam = create_mimizam_elasticsearch(
+                **elasticsearch_config,
+                matcher_config={
+                    'min_confidence': 0.1,
+                    'max_results': 5,
+                    'scoring_method': 'hybrid'
+                },
+                enable_adaptive_params=False
+            )
+
+            song_id = mimizam.add_song(
+                file_path=self.test_audio_file,
+                title="Meta Song",
+                artist="Meta Artist",
+                song_id="meta_song_es",
+                meta_json=json.dumps(meta)
+            )
+            self.assertIsNotNone(song_id)
+            song = mimizam.get_song(song_id)
+            self.assertIsNotNone(song)
+            self.assertIsInstance(song.meta, dict)
+            self.assertEqual(song.meta["genre"], "electro")
+            self.assertEqual(song.meta["year"], 2027)
+            self.assertIn("elasticsearch", song.meta["tags"])
     
     def setUp(self):
         """各テストの前に実行される準備"""

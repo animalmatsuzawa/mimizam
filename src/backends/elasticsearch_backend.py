@@ -147,6 +147,7 @@ class ElasticsearchBackend(DatabaseBackend):
                             }
                         },
                         "file_path": {"type": "keyword"},
+                        "meta": {"type": "object", "enabled": True},
                         "created_at": {"type": "date"}
                     }
                 }
@@ -203,6 +204,7 @@ class ElasticsearchBackend(DatabaseBackend):
                 "title": song.title,
                 "artist": song.artist,
                 "file_path": song.file_path,
+                "meta": song.meta if song.meta else None,
                 "created_at": datetime.now().isoformat()
             }
             
@@ -368,11 +370,13 @@ class ElasticsearchBackend(DatabaseBackend):
             
             result = self.client.get(index=self.songs_index, id=song_id)
             source = result['_source']
+            meta = source.get('meta') if 'meta' in source else None
             return Song(
                 id=source['id'],
                 title=source['title'],
                 artist=source['artist'],
                 file_path=source['file_path'],
+                meta=meta,
                 created_at=source.get('created_at')
             )
         except ElasticsearchException as e:
@@ -403,11 +407,13 @@ class ElasticsearchBackend(DatabaseBackend):
             
             for hit in result['hits']['hits']:
                 source = hit['_source']
+                meta = source.get('meta') if 'meta' in source else None
                 songs.append(Song(
                     id=source['id'],
                     title=source['title'],
                     artist=source['artist'],
                     file_path=source['file_path'],
+                    meta=meta,
                     created_at=source.get('created_at')
                 ))
         except ElasticsearchException as e:

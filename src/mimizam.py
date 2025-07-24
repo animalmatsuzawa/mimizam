@@ -10,6 +10,7 @@ import uuid
 import logging
 from typing import List, Optional, Dict, Any, Tuple
 from pathlib import Path
+import json
 
 from .audio_fingerprinter import AudioFingerprinter
 from .fingerprint_database import FingerprintDatabase, FingerprintMatcher
@@ -75,7 +76,8 @@ class Mimizam:
         self.logger.info(f"Matcher configuration - confidence: {default_matcher_config['min_confidence']}, max results: {default_matcher_config['max_results']}, scoring: {default_matcher_config['scoring_method']}")
     
     def add_song(self, file_path: str, title: str, artist: str, 
-                 song_id: Optional[str] = None) -> Optional[str]:
+                 song_id: Optional[str] = None,
+                 meta_json: Optional[str] = None) -> Optional[str]:
         """
         音楽ファイルをシステムに追加
         
@@ -86,6 +88,7 @@ class Mimizam:
             title: 楽曲タイトル
             artist: アーティスト名
             song_id: 楽曲ID（指定しない場合は自動生成）
+            meta_json: 追加のメタ情報（JSON文字列、任意）
             
         Returns:
             Optional[str]: 追加に成功した場合は楽曲ID、失敗した場合はNone
@@ -116,11 +119,18 @@ class Mimizam:
             self.logger.info(f"Generated {len(fingerprints)} fingerprints")
             
             # 楽曲メタデータを作成
+            meta_dict = None
+            if meta_json:
+                try:
+                    meta_dict = json.loads(meta_json)
+                except Exception as e:
+                    self.logger.warning(f"Failed to parse meta_json: {e}")
             song = Song(
                 id=song_id,
                 title=title,
                 artist=artist,
-                file_path=file_path
+                file_path=file_path,
+                meta=meta_dict if meta_dict else None
             )
             
             # データベースに楽曲を追加

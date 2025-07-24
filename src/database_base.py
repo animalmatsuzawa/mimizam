@@ -25,6 +25,7 @@ class Song:
     title: str
     artist: str
     file_path: str
+    meta: Optional[dict] = None 
     created_at: Optional[str] = None
 
 
