@@ -212,7 +212,7 @@ class ElasticsearchBackend(DatabaseBackend):
                 index=self.songs_index,
                 id=song.id,
                 body=song_doc,
-                refresh=False,  # リフレッシュを無効化してパフォーマンス向上
+                refresh=True,  # リフレッシュを有効化して最新データを即時反映
                 timeout='60s'  # タイムアウト延長
             )
             
@@ -261,7 +261,7 @@ class ElasticsearchBackend(DatabaseBackend):
                     self.client, 
                     actions,
                     chunk_size=5000,
-                    refresh=False  # 非同期リフレッシュでパフォーマンス向上
+                    refresh=True  # リフレッシュを有効化して最新データを即時反映
                 )
                 
                 if failed:
@@ -276,97 +276,44 @@ class ElasticsearchBackend(DatabaseBackend):
     def search_fingerprints(self, query_fingerprints: List[Fingerprint]) -> Dict[str, List[Tuple[float, float]]]:
         """Elasticsearchでフィンガープリントを検索"""
         matches = {}
-
         if not query_fingerprints:
             return matches
-
-        try:
-            # 検索前にインデックスを明示的にリフレッシュ（最新データを確実に反映）
-            try:
-                self.client.indices.refresh(index=self.fingerprints_index)
-            except ElasticsearchException:
-                pass  # リフレッシュエラーは無視
-            
-            # ハッシュ値のリストを作成
-            hash_values = [fp.hash_value for fp in query_fingerprints]
-            hash_to_time = {fp.hash_value: float(fp.time_offset) for fp in query_fingerprints}
-            
-            # Elasticsearch専用高性能検索クエリ
-            search_body = {
+        hash_values = [fp.hash_value for fp in query_fingerprints]
+        hash_to_time = {fp.hash_value: float(fp.time_offset) for fp in query_fingerprints}
+        batch_size = 10000
+        for i in range(0, len(hash_values), batch_size):
+            batch_hash_values = hash_values[i:i + batch_size]
+            search_query = {
                 "query": {
                     "bool": {
                         "filter": [
-                            {
-                                "terms": {
-                                    "hash_value": hash_values,
-                                    "boost": 1.0
-                                }
-                            }
+                            {"terms": {"hash_value": batch_hash_values}}
                         ]
                     }
                 },
                 "_source": ["song_id", "hash_value", "time_offset"],
-                "size": 50000,  # 大量結果対応
                 "sort": [
-                    {"song_id": {"order": "asc"}},  # ソート最適化
+                    {"song_id": {"order": "asc"}},
                     {"time_offset": {"order": "asc"}}
                 ],
-                "track_total_hits": False,  # カウント無効化で高速化
-                "timeout": "30s"  # タイムアウト設定
+                "size": 10000,
+                "timeout": "30s"
             }
-            
-            # バッチサイズによる分割検索（Elasticsearchの制限対応）
-            batch_size = 10000  # terms クエリの最大サイズ制限対応
-            
-            for i in range(0, len(hash_values), batch_size):
-                batch_hash_values = hash_values[i:i + batch_size]
-                
-                # バッチ用クエリを作成
-                batch_search_body = search_body.copy()
-                batch_search_body["query"]["bool"]["filter"][0]["terms"]["hash_value"] = batch_hash_values
-                
-                try:
-                    # 検索実行
-                    result = self.client.search(
-                        index=self.fingerprints_index,
-                        body=batch_search_body,
-                        preference="_local",  # ローカルシャード優先
-                        request_cache=True,  # リクエストキャッシュ有効化
-                        allow_partial_search_results=False  # 部分結果無効化
-                    )
-                    
-                    # 結果処理
-                    for hit in result['hits']['hits']:
-                        source = hit['_source']
-                        hash_value = source['hash_value']
-                        song_id = source['song_id']
-                        db_time_offset = source['time_offset']
-                        
-                        if hash_value in hash_to_time:
-                            query_time_offset = hash_to_time[hash_value]
-                            
-                            if song_id not in matches:
-                                matches[song_id] = []
-                            matches[song_id].append((float(query_time_offset), float(db_time_offset)))
-                            
-                except ElasticsearchException as batch_error:
-                    self.logger.warning(f"Elasticsearch batch search error (batch {i//batch_size + 1}): {batch_error}")
-                    continue
-                        
-        except ElasticsearchException as e:
-            self.logger.error(f"Elasticsearch fingerprint search error: {e}")
-        
+            for hit in self._scroll_all_hits(self.fingerprints_index, search_query):
+                source = hit['_source']
+                hash_value = source['hash_value']
+                song_id = source['song_id']
+                db_time_offset = source['time_offset']
+                if hash_value in hash_to_time:
+                    query_time_offset = hash_to_time[hash_value]
+                    if song_id not in matches:
+                        matches[song_id] = []
+                    matches[song_id].append((float(query_time_offset), float(db_time_offset)))
         return matches
     
     def get_song(self, song_id: str) -> Optional[Song]:
         """Elasticsearchから楽曲情報を取得"""
         try:
-            # 検索前にインデックスを明示的にリフレッシュ（最新データを確実に反映）
-            try:
-                self.client.indices.refresh(index=self.songs_index)
-            except ElasticsearchException:
-                pass  # リフレッシュエラーは無視
-            
             result = self.client.get(index=self.songs_index, id=song_id)
             source = result['_source']
             meta = source.get('meta') if 'meta' in source else None
@@ -388,12 +335,6 @@ class ElasticsearchBackend(DatabaseBackend):
         """Elasticsearchから全楽曲をリスト表示"""
         songs = []
         try:
-            # 検索前にインデックスを明示的にリフレッシュ（最新データを確実に反映）
-            try:
-                self.client.indices.refresh(index=self.songs_index)
-            except ElasticsearchException:
-                pass  # リフレッシュエラーは無視
-            
             result = self.client.search(
                 index=self.songs_index,
                 query={"match_all": {}},
@@ -425,13 +366,6 @@ class ElasticsearchBackend(DatabaseBackend):
         stats = {"songs": 0, "fingerprints": 0}
         
         try:
-            # インデックスを明示的にリフレッシュ（最新データを確実に反映）
-            try:
-                self.client.indices.refresh(index=self.songs_index)
-                self.client.indices.refresh(index=self.fingerprints_index)
-            except ElasticsearchException:
-                pass  # リフレッシュエラーは無視
-            
             # 楽曲数を取得
             songs_count = self.client.count(index=self.songs_index)
             stats["songs"] = songs_count['count']
@@ -449,7 +383,7 @@ class ElasticsearchBackend(DatabaseBackend):
         """Elasticsearchから楽曲を削除"""
         try:
             # 楽曲を削除
-            self.client.delete(index=self.songs_index, id=song_id)
+            self.client.delete(index=self.songs_index, id=song_id, refresh=True)
             
             # 関連するフィンガープリントを削除
             delete_query = {
@@ -457,7 +391,7 @@ class ElasticsearchBackend(DatabaseBackend):
                     "term": {"song_id": song_id}
                 }
             }
-            self.client.delete_by_query(index=self.fingerprints_index, body=delete_query)
+            self.client.delete_by_query(index=self.fingerprints_index, body=delete_query, refresh=True)
             
             return True
         except ElasticsearchException as e:
@@ -467,76 +401,52 @@ class ElasticsearchBackend(DatabaseBackend):
     def get_fingerprints_by_song(self, song_id: str) -> List[Fingerprint]:
         """指定した楽曲のフィンガープリントを取得"""
         fingerprints = []
-        
+        search_query = {
+            "query": {
+                "bool": {
+                    "filter": [
+                        {"term": {"song_id": song_id}}
+                    ]
+                }
+            },
+            "_source": ["hash_value", "time_offset"],
+            "size": 10000,
+            "sort": [{"time_offset": {"order": "asc"}}],
+            "timeout": "30s"
+        }
+        for hit in self._scroll_all_hits(self.fingerprints_index, search_query):
+            source = hit['_source']
+            fingerprints.append(Fingerprint(
+                hash_value=source['hash_value'],
+                time_offset=float(source['time_offset']),
+                song_id=song_id
+            ))
+        return fingerprints
+    
+    def _scroll_all_hits(self, index, body, scroll='2m'):
+        """Elasticsearch scrollで全件取得するジェネレータ"""
         try:
-            # 楽曲に関連するフィンガープリントを検索（最適化クエリ）
-            search_query = {
-                "query": {
-                    "bool": {
-                        "filter": [
-                            {"term": {"song_id": song_id}}
-                        ]
-                    }
-                },
-                "_source": ["hash_value", "time_offset"],
-                "size": 50000,  # 大量のフィンガープリントに対応
-                "sort": [{"time_offset": {"order": "asc"}}],  # 時間順ソート最適化
-                "track_total_hits": False,  # カウント無効化で高速化
-                "timeout": "30s"
-            }
-            
-            # スクロール検索で大量データ対応
             response = self.client.search(
-                index=self.fingerprints_index, 
-                body=search_query,
-                scroll='2m',  # スクロールタイムアウト
-                preference="_local",  # ローカルシャード優先
-                request_cache=True  # キャッシュ有効化
+                index=index,
+                body=body,
+                scroll=scroll,
+                preference="_local"
             )
-            
-            scroll_id = response['_scroll_id']
-            
-            # 初回結果を処理
-            for hit in response['hits']['hits']:
-                source = hit['_source']
-                fp = Fingerprint(
-                    hash_value=source['hash_value'],
-                    time_offset=float(source['time_offset']),
-                    song_id=song_id
-                )
-                fingerprints.append(fp)
-            
-            # スクロールで残りの結果を取得
-            while len(response['hits']['hits']) > 0:
-                try:
-                    response = self.client.scroll(
-                        scroll_id=scroll_id,
-                        scroll='2m'
-                    )
-                    
-                    if not response['hits']['hits']:
-                        break
-                        
-                    for hit in response['hits']['hits']:
-                        source = hit['_source']
-                        fp = Fingerprint(
-                            hash_value=source['hash_value'],
-                            time_offset=float(source['time_offset']),
-                            song_id=song_id
-                        )
-                        fingerprints.append(fp)
-                        
-                except ElasticsearchException as scroll_error:
-                    self.logger.warning(f"Scroll search error: {scroll_error}")
+            scroll_id = response.get('_scroll_id')
+            while True:
+                hits = response['hits']['hits']
+                if not hits:
                     break
-            
+                yield from hits
+                response = self.client.scroll(scroll_id=scroll_id, scroll=scroll)
+                scroll_id = response.get('_scroll_id')
+                if not response['hits']['hits']:
+                    break
             # スクロールクリーンアップ
             try:
-                self.client.clear_scroll(scroll_id=scroll_id)
-            except ElasticsearchException:
-                pass  # クリーンアップエラーは無視
-                
+                if scroll_id:
+                    self.client.clear_scroll(scroll_id=scroll_id)
+            except ElasticsearchException as e:
+                self.logger.warning(f"Scroll cleanup error: {e}")
         except ElasticsearchException as e:
-            self.logger.error(f"Elasticsearch fingerprint retrieval error: {e}")
-        
-        return fingerprints
+            self.logger.error(f"Elasticsearch scroll error: {e}")
