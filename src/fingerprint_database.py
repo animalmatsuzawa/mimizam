@@ -309,7 +309,7 @@ class FingerprintMatcher:
                     best_conf = conf
                     best_group = pairs
                     best_group_info = (t_scale, f_scale)
-            if best_group and best_conf >= self.min_confidence:
+            if best_group and best_conf >= self.min_confidence and best_group_info:
                 time_offset = self._calculate_time_offset(best_group)
                 alignment_ratio = self._calculate_alignment_ratio(best_group)
                 match_density = self._calculate_match_density(best_group)
