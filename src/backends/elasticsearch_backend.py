@@ -22,6 +22,7 @@ from typing import List, Optional, Dict, Tuple
 from datetime import datetime
 import traceback
 from ..database_base import DatabaseBackend, DatabaseConfig, Song, Fingerprint
+from ..exceptions import ConnectionError, QueryError, log_and_raise
 
 try:
     from elasticsearch import Elasticsearch
@@ -102,9 +103,8 @@ class ElasticsearchBackend(DatabaseBackend):
                 return False
                 
         except Exception as e:
-            self.logger.error(f"Elasticsearch connection error: {e}")
-            self.logger.error(f"Configuration: host={self.config.host}, port={self.config.port}")
-            self.logger.error(f"Stack trace: {traceback.format_exc()}")
+            context = {"host": self.config.host, "port": self.config.port}
+            log_and_raise(self.logger, ConnectionError, f"Elasticsearch connection error", e, context)
             return False
     
     def disconnect(self) -> None:
@@ -193,7 +193,7 @@ class ElasticsearchBackend(DatabaseBackend):
             
             return True
         except ElasticsearchException as e:
-            self.logger.error(f"Elasticsearch index creation error: {e}")
+            log_and_raise(self.logger, QueryError, f"Elasticsearch index creation error", e)
             return False
     
     def add_song(self, song: Song) -> bool:
@@ -225,7 +225,7 @@ class ElasticsearchBackend(DatabaseBackend):
                 return False
                 
         except ElasticsearchException as e:
-            self.logger.error(f"Elasticsearch song addition error: {e}")
+            log_and_raise(self.logger, QueryError, f"Elasticsearch song addition error", e)
             return False
     
     def add_fingerprints(self, song_id: str, fingerprints: List[Fingerprint]) -> bool:
@@ -271,7 +271,7 @@ class ElasticsearchBackend(DatabaseBackend):
             
             return True
         except Exception as e:
-            self.logger.error(f"Elasticsearch fingerprint addition error: {e}")
+            log_and_raise(self.logger, QueryError, f"Elasticsearch fingerprint addition error", e)
             return False
 
     def search_fingerprints(self, query_fingerprints: List[Fingerprint]) -> Dict[str, List[Tuple[float, float]]]:
@@ -462,7 +462,7 @@ class ElasticsearchBackend(DatabaseBackend):
             
             return True
         except ElasticsearchException as e:
-            self.logger.error(f"Elasticsearch song deletion error: {e}")
+            log_and_raise(self.logger, QueryError, f"Elasticsearch song deletion error", e)
             return False
 
     def get_fingerprints_by_song(self, song_id: str) -> List[Fingerprint]:
