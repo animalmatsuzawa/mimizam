@@ -881,10 +881,7 @@ class AudioFingerprinter:
             return self.fingerprint_audio(audio, debug)
         except Exception as e:
             error_msg = f"Error processing audio file {file_path}"
-            if debug:
-                logger.error(f"{error_msg}: {e}")
-            else:
-                logger.error(error_msg)
+            logger.error(f"{error_msg}: {e}")
             raise AudioProcessingError(error_msg, e)
     
     def visualize_analysis(self, audio: np.ndarray, title: str = "voice analysis") -> None:
