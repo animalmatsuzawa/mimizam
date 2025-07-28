@@ -22,7 +22,7 @@ from typing import List, Optional, Dict, Tuple
 from datetime import datetime
 import traceback
 from ..database_base import DatabaseBackend, DatabaseConfig, Song, Fingerprint
-from ..exceptions import ConnectionError, QueryError, log_and_raise
+from ..exceptions import ConnectionError, QueryError
 
 try:
     from elasticsearch import Elasticsearch

@@ -20,7 +20,7 @@ import logging
 import time
 from .adaptive_parameters import AdaptiveParameterTuner, PerformanceMonitor
 from .database_base import Fingerprint
-from .exceptions import AudioProcessingError, FingerprintGenerationError, log_and_raise
+from .exceptions import AudioProcessingError, FingerprintGenerationError
 
 # Numba JIT最適化（オプション）
 try:
@@ -880,9 +880,12 @@ class AudioFingerprinter:
             audio = self.load_audio(file_path)
             return self.fingerprint_audio(audio, debug)
         except Exception as e:
+            error_msg = f"Error processing audio file {file_path}"
             if debug:
-                logger.error(f"Error processing audio file {file_path}: {e}")
-            log_and_raise(logger, AudioProcessingError, f"Error processing audio file {file_path}", e)
+                logger.error(f"{error_msg}: {e}")
+            else:
+                logger.error(error_msg)
+            raise AudioProcessingError(error_msg, e)
     
     def visualize_analysis(self, audio: np.ndarray, title: str = "voice analysis") -> None:
         """

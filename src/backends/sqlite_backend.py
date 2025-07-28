@@ -2,7 +2,7 @@
 
 from typing import List, Optional, Dict, Tuple
 from ..database_base import DatabaseBackend, DatabaseConfig, Song, Fingerprint
-from ..exceptions import ConnectionError, QueryError, log_and_raise
+from ..exceptions import ConnectionError, QueryError
 import json
 
 try:
