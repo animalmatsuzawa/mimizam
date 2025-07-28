@@ -69,7 +69,6 @@ class MySQLBackend(DatabaseBackend):
             return True
         except MySQLError as e:
             log_and_raise(self.logger, ConnectionError, f"MySQL connection error", e)
-            return False
     
     def disconnect(self) -> None:
         """MySQLデータベースから切断"""
@@ -136,7 +135,6 @@ class MySQLBackend(DatabaseBackend):
             return True
         except MySQLError as e:
             log_and_raise(self.logger, QueryError, f"MySQL table creation error", e)
-            return False
     
     def add_song(self, song: Song) -> bool:
         """MySQLに楽曲を追加"""
@@ -155,7 +153,6 @@ class MySQLBackend(DatabaseBackend):
             return True
         except MySQLError as e:
             log_and_raise(self.logger, QueryError, f"MySQL song addition error", e)
-            return False
     
     def add_fingerprints(self, song_id: str, fingerprints: List[Fingerprint]) -> bool:
         """MySQLにフィンガープリントを追加"""
@@ -179,7 +176,6 @@ class MySQLBackend(DatabaseBackend):
             return True
         except MySQLError as e:
             log_and_raise(self.logger, QueryError, f"MySQL fingerprint addition error", e)
-            return False
     
     def search_fingerprints(self, query_fingerprints: List[Fingerprint]) -> Dict[str, List[Tuple[float, float]]]:
         """MySQLでフィンガープリントを検索"""
@@ -295,7 +291,6 @@ class MySQLBackend(DatabaseBackend):
             return True
         except MySQLError as e:
             log_and_raise(self.logger, QueryError, f"MySQL song deletion error", e)
-            return False
 
     def get_fingerprints_by_song(self, song_id: str) -> List[Fingerprint]:
         """指定した楽曲のフィンガープリントを取得"""
