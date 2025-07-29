@@ -1,6 +1,6 @@
 # システムアーキテクチャ
 
-mimizamは、音声指紋生成と識別のための包括的なシステムです。本ドキュメントでは、システム全体のアーキテクチャと各コンポーネントの役割について詳しく説明します。
+mimizamは、音声指紋生成と識別のためのシンプルで効率的なシステムです。本ドキュメントでは、システム全体の構成と各コンポーネントの役割について説明します。
 
 ## 🏗️ 全体アーキテクチャ
 
@@ -47,57 +47,56 @@ mimizamは4つの主要レイヤーで構成されています：
 
 ### 1. アプリケーション層
 
-#### CLI ツール
-```python
-# video_search.py - 動画音声検索ツール
-python examples/video_search.py --query video.mp4 --database music.db
+ユーザーが直接操作するインターフェースです：
 
-# video_fingerprinter.py - バッチ処理ツール
-python examples/video_fingerprinter.py --input-dir videos/ --output-db batch.db
-```
-
-#### デモアプリケーション
-```python
-# mimizam_demo.py - 基本機能デモ
-python examples/mimizam_demo.py
-
-# lowlevelapi_demo.py - 低レベルAPI デモ
-python examples/lowlevelapi_demo.py
-```
+- **CLI ツール**: コマンドラインから音声検索を実行
+- **デモアプリ**: 基本機能を試すためのサンプルアプリケーション
+- **カスタムアプリ**: ユーザーが作成する独自のアプリケーション
 
 ### 2. 統合API層
 
-#### Mimizam クラス
-統合APIの中核となるクラスで、全てのデータベースバックエンドに対して一貫したインターフェースを提供します。
+**Mimizam クラス**が中核となり、全てのデータベースバックエンドに対して一貫したインターフェースを提供します。
 
-```python
-class Mimizam:
-    """統合音声指紋システム"""
-    
-    def __init__(self, database: FingerprintDatabase, 
-                 fingerprinter: AudioFingerprinter):
-        self.database = database
-        self.fingerprinter = fingerprinter
-    
-    def add_song(self, file_path: str, title: str, artist: str) -> int:
-        """楽曲追加の統合処理"""
-        # 1. 音声読み込み
-        # 2. 指紋生成
-        # 3. データベース保存
-        pass
-    
-    def search_song(self, query_path: str, **kwargs) -> List[Dict]:
-        """音声検索の統合処理"""
-        # 1. クエリ音声処理
-        # 2. 指紋マッチング
-        # 3. 結果ランキング
-        pass
-```
+主要メソッド：
+- `add_song()`: 楽曲をデータベースに追加
+- `search_song()`: 音声検索を実行
+- `identify_audio()`: 音声を識別
+- `get_song()`: 楽曲情報を取得
+- `delete_song()`: 楽曲を削除
 
-#### ファクトリ関数
-```python
-def create_mimizam_sqlite(db_path: str, **kwargs) -> Mimizam:
-    """SQLite バックエンドでMimizam インスタンスを作成"""
+**ファクトリ関数**により、データベースの種類に応じたインスタンスを簡単に作成できます：
+- `create_mimizam_sqlite()`: SQLite用
+- `create_mimizam_mysql()`: MySQL用
+- `create_mimizam_postgresql()`: PostgreSQL用
+
+### 3. コア処理層
+
+音声処理の核となる3つのコンポーネント：
+
+#### AudioFingerprinter
+- 音声ファイルの読み込み
+- スペクトログラム解析
+- 音声指紋の生成
+- 可視化機能
+
+#### FingerprintDatabase
+- データベース操作の統合管理
+- 楽曲と指紋の保存・検索
+- バックエンド間の差異を吸収
+
+#### FingerprintMatcher
+- 指紋マッチングの実行
+- スコアリングアルゴリズム
+- 結果の信頼度計算
+
+### 4. データベース層
+
+各データベースシステムに特化した実装：
+
+- **SQLiteBackend**: ファイルベース、軽量（開発・小規模用途）
+- **MySQLBackend**: 高性能、スケーラブル（本番環境）
+- **PostgreSQLBackend**: 堅牢、機能豊富（複雑なクエリ）
+- **ElasticsearchBackend**: 全文検索、分散処理（大規模検索）
     config = create_sqlite_config(db_path)
     database = FingerprintDatabase(config)
     fingerprinter = AudioFingerprinter(**kwargs)

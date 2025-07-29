@@ -5,59 +5,26 @@
 ## 📚 Wiki目次
 
 ### 🚀 はじめに
-- [概要とクイックスタート](./01_overview.md)
-- [インストールガイド](./02_installation.md)
-- [基本的な使用方法](./03_basic_usage.md)
+- [概要とクイックスタート](./01_overview.md) - mimizamの紹介と基本的な使い方
+- [インストールガイド](./02_installation.md) - セットアップと依存関係
+- [基本的な使用方法](./03_basic_usage.md) - 実践的な使用例とパターン
 
-### 🏗️ アーキテクチャ
-- [システムアーキテクチャ](./04_architecture.md)
-- [コア技術詳細](./05_core_technology.md)
-- [プロジェクト構造](./06_project_structure.md)
+### 🏗️ システム理解
+- [システムアーキテクチャ](./04_architecture.md) - 全体構成とコンポーネント
+- [データベース設定ガイド](./10_database_setup.md) - データベース選択と設定
 
-### 🔧 API リファレンス
-- [統合API (Mimizam)](./07_unified_api.md)
-- [低レベルAPI](./08_lowlevel_api.md)
-- [データ構造](./09_data_structures.md)
-
-### 🗄️ データベース
-- [データベース設定ガイド](./10_database_setup.md)
-- [バックエンド比較](./11_backend_comparison.md)
-- [パフォーマンス最適化](./12_performance_optimization.md)
-
-### 🎵 音声処理
-- [音声指紋生成アルゴリズム](./13_fingerprint_generation.md)
-- [スコアリング詳細](./14_scoring_details.md)
-- [適応パラメータ調整](./15_adaptive_parameters.md)
-
-### 💻 実装例
-- [基本的な使用例](./16_basic_examples.md)
-- [高度な使用例](./17_advanced_examples.md)
-- [動画音声処理](./18_video_processing.md)
-
-### 🔧 ツールとユーティリティ
-- [データベース移行ツール](./19_migration_tools.md)
-- [パフォーマンス分析](./20_performance_analysis.md)
-- [デバッグとトラブルシューティング](./21_debugging.md)
-
-### 🧪 テストと検証
-- [テストスイート](./22_testing.md)
-- [パフォーマンステスト](./23_performance_testing.md)
-- [品質保証](./24_quality_assurance.md)
-
-### 📖 技術資料
-- [アルゴリズム比較](./25_algorithm_comparison.md)
-- [参考文献](./26_references.md)
-- [FAQ](./27_faq.md)
+### 💻 実践ガイド
+- [基本的な使用例](./16_basic_examples.md) - すぐに使えるサンプルコード
+- [よくある質問（FAQ）](./27_faq.md) - トラブルシューティングとヒント
 
 ---
 
 ## 🎯 主な機能
 
 - **高精度音声指紋生成**: Shazamアルゴリズムベースの指紋生成
-- **適応パラメータ最適化**: 音声特性に応じた自動パラメータ調整
 - **マルチデータベース対応**: SQLite、MySQL、PostgreSQL、Elasticsearch
 - **リアルタイム音声識別**: 短い音声クリップから楽曲を特定
-- **可視化機能**: スペクトログラムとピーク検出の可視化
+- **シンプルなAPI**: 初心者でも簡単に使える統合インターフェース
 
 ## 🚀 クイックスタート
 
@@ -77,14 +44,13 @@ with create_mimizam_sqlite("my_music.db") as mimizam:
         print(f"発見: {song.title} by {song.artist} (信頼度: {confidence:.2%})")
 ```
 
-## 📊 システム概要
+## 📖 学習の流れ
 
-mimizamは以下の4つの主要レイヤーで構成されています：
-
-1. **高レベルAPI層**: 統合されたMimizamクラスとファクトリ関数
-2. **音声処理エンジン**: AudioFingerprinter、SpectrogramAnalyzer、HashGenerator
-3. **データベース・マッチング層**: FingerprintDatabase、FingerprintMatcher
-4. **アプリケーション・ツール層**: CLI ツール、デモアプリケーション
+1. **[概要](./01_overview.md)** でmimizamの全体像を理解
+2. **[インストール](./02_installation.md)** でセットアップを完了
+3. **[基本使用方法](./03_basic_usage.md)** で基本操作を習得
+4. **[実用例](./16_basic_examples.md)** で実践的な使い方を学習
+5. **[FAQ](./27_faq.md)** で問題解決方法を確認
 
 ## 🔗 関連リンク
 
