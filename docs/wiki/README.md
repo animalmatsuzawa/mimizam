@@ -88,7 +88,7 @@ mimizamは以下の4つの主要レイヤーで構成されています：
 
 ## 🔗 関連リンク
 
-- [GitHub リポジトリ](https://github.com/matsu582/mimizam)
+- [GitHub リポジトリ](https://github.com/animalmatsuzawa/mimizam)
 - [技術ドキュメント](../docs/)
 - [サンプルコード](../examples/)
 - [テストスイート](../tests/)

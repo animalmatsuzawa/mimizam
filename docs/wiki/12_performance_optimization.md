@@ -416,60 +416,72 @@ PERFORMANCE_METRICS = {
 ### 統合最適化クラス
 
 ```python
-class MimizamOptimizer:
-    """mimizam統合最適化"""
-    
-    def __init__(self):
-        self.memory_pool = MemoryPool()
-        self.gc_optimizer = GCOptimizer()
-        self.cache = SmartCache()
-    
-    def optimize_system(self):
-        """システム全体の最適化"""
-        print("=== mimizamシステム最適化開始 ===")
-        
-        # GC最適化
-        self.gc_optimizer.setup_gc()
-        
-        # メモリプール初期化
-        print("メモリプール初期化完了")
-        
-        # キャッシュクリア
-        self.cache.clear()
-        print("キャッシュクリア完了")
-        
-        # システム情報表示
-        self._show_system_info()
-    
-    def _show_system_info(self):
-        """システム情報の表示"""
-        import platform
-        
-        print(f"\n=== システム情報 ===")
-        print(f"Python: {platform.python_version()}")
-        print(f"プラットフォーム: {platform.platform()}")
-        print(f"CPU数: {os.cpu_count()}")
-        
-        # Numba情報
-        try:
-            import numba
-            print(f"Numba: {numba.__version__}")
-        except ImportError:
-            print("Numba: 未インストール")
-    
-    def create_optimized_fingerprinter(self) -> AudioFingerprinter:
-        """最適化された指紋生成器を作成"""
-        return AudioFingerprinter(
-            enable_numba_optimization=True,
-            enable_adaptive_params=True,
-            n_fft=2048,
-            hop_length=512,
-            sr=22050
-        )
+from mimizam import AudioFingerprinter, create_mimizam_sqlite
+import gc
+import psutil
+import platform
 
-# 最適化システムの使用
-optimizer = MimizamOptimizer()
-optimizer.optimize_system()
+def optimize_system_performance():
+    """システムパフォーマンスを最適化"""
+    print("=== mimizamシステム最適化開始 ===")
+    
+    # システム情報を表示
+    print(f"OS: {platform.system()} {platform.release()}")
+    print(f"CPU: {psutil.cpu_count()}コア")
+    print(f"メモリ: {psutil.virtual_memory().total // (1024**3)}GB")
+    
+    # Numba確認
+    try:
+        import numba
+        print(f"Numba: {numba.__version__}")
+    except ImportError:
+        print("Numba: 未インストール")
+    
+    # ガベージコレクション実行
+    collected = gc.collect()
+    print(f"ガベージコレクション: {collected}オブジェクト削除")
+    
+    print("=== 最適化完了 ===")
+
+def create_optimized_fingerprinter():
+    """最適化されたFingerprinterを作成"""
+    return AudioFingerprinter(
+        n_fft=2048,
+        hop_length=512,
+        sr=22050,
+        enable_numba_optimization=True,  # Numba最適化を有効化
+        enable_adaptive_params=True      # 適応的パラメータを有効化
+    )
+
+def create_optimized_mimizam():
+    """最適化されたMimizamシステムを作成"""
+    # 最適化されたFingerprinter設定
+    fingerprinter_config = {
+        'enable_numba_optimization': True,
+        'enable_adaptive_params': True
+    }
+    
+    # Matcher設定
+    matcher_config = {
+        'min_confidence': 0.1,
+        'max_results': 5,
+        'scoring_method': 'hybrid'
+    }
+    
+    return create_mimizam_sqlite(
+        db_path="optimized.db",
+        matcher_config=matcher_config,
+        **fingerprinter_config
+    )
+
+# 使用例
+optimize_system_performance()
+
+# 最適化されたシステムを作成
+mimizam = create_optimized_mimizam()
+fingerprinter = create_optimized_fingerprinter()
+
+print("最適化されたmimizamシステムが準備完了")
 ```
 
 ## 🔗 関連ドキュメント

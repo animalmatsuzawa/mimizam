@@ -89,65 +89,73 @@ SUPPORTED_AUDIO_FORMATS = {
 ### FFmpeg連携設定
 
 ```python
-class VideoProcessor:
-    """動画処理クラス"""
+import subprocess
+import json
+from pathlib import Path
+from mimizam import create_mimizam_sqlite
+
+def extract_audio_from_video(video_path: str, output_path: str = None, 
+                           ffmpeg_path: str = "ffmpeg") -> str:
+    """動画から音声を抽出"""
     
-    def __init__(self, ffmpeg_path: str = "ffmpeg"):
-        self.ffmpeg_path = ffmpeg_path
-        self.temp_dir = "./temp_audio"
-        self.ensure_temp_directory()
+    if output_path is None:
+        video_name = Path(video_path).stem
+        output_path = f"{video_name}.wav"
     
-    def ensure_temp_directory(self):
-        """一時ディレクトリの確保"""
-        os.makedirs(self.temp_dir, exist_ok=True)
+    # FFmpegコマンドを構築
+    cmd = [
+        ffmpeg_path,
+        "-i", video_path,
+        "-vn",  # 動画ストリームを無視
+        "-acodec", "pcm_s16le",  # 16bit PCM
+        "-ar", "22050",  # サンプリングレート
+        "-ac", "1",  # モノラル
+        "-y",  # 上書き許可
+        output_path
+    ]
     
-    def extract_audio(self, video_path: str, output_path: str = None) -> str:
-        """動画から音声を抽出"""
-        
-        if output_path is None:
-            video_name = os.path.splitext(os.path.basename(video_path))[0]
-            output_path = os.path.join(self.temp_dir, f"{video_name}.wav")
-        
-        # FFmpegコマンドの構築
-        cmd = [
-            self.ffmpeg_path,
-            '-i', video_path,           # 入力動画
-            '-vn',                      # 動画ストリームを無視
-            '-acodec', 'pcm_s16le',     # 音声コーデック
-            '-ar', '22050',             # サンプルレート
-            '-ac', '1',                 # モノラル
-            '-y',                       # 上書き許可
-            output_path
-        ]
-        
-        try:
-            # FFmpeg実行
-            import subprocess
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                check=True
-            )
-            
-            print(f"音声抽出完了: {output_path}")
-            return output_path
-            
-        except subprocess.CalledProcessError as e:
-            print(f"音声抽出エラー: {e}")
-            print(f"FFmpeg出力: {e.stderr}")
-            raise
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        print(f"音声抽出完了: {output_path}")
+        return output_path
+    except subprocess.CalledProcessError as e:
+        raise Exception(f"FFmpeg error: {e.stderr}")
+
+def process_video_with_mimizam(video_path: str, title: str, artist: str) -> str:
+    """動画を処理してmimizamに追加"""
     
-    def get_video_info(self, video_path: str) -> dict:
-        """動画情報を取得"""
+    # mimizamインスタンスを作成
+    mimizam = create_mimizam_sqlite("video_database.db")
+    
+    try:
+        # 音声を抽出
+        audio_path = extract_audio_from_video(video_path)
         
-        cmd = [
-            'ffprobe',
-            '-v', 'quiet',
-            '-print_format', 'json',
-            '-show_format',
-            '-show_streams',
-            video_path
+        # mimizamに追加
+        song_id = mimizam.add_song(audio_path, title, artist)
+        
+        # 一時ファイルを削除
+        Path(audio_path).unlink()
+        
+        print(f"動画が追加されました: {song_id}")
+        return song_id
+        
+    except Exception as e:
+        print(f"動画処理エラー: {e}")
+        return None
+    finally:
+        mimizam.close()
+
+def get_video_info(video_path: str) -> dict:
+    """動画情報を取得"""
+    
+    cmd = [
+        "ffprobe",
+        "-v", "quiet",
+        "-print_format", "json",
+        "-show_format",
+        "-show_streams",
+        video_path
         ]
         
         try:

@@ -28,7 +28,7 @@
 
 ```bash
 # GitHubからクローン
-git clone https://github.com/matsu582/mimizam.git
+git clone https://github.com/animalmatsuzawa/mimizam.git
 cd mimizam
 ```
 
@@ -375,6 +375,6 @@ resource.setrlimit(resource.RLIMIT_AS, (2*1024*1024*1024, -1))  # 2GB制限
 
 インストールに関する問題がある場合：
 
-1. [GitHub Issues](https://github.com/matsu582/mimizam/issues) で問題を報告
+1. [GitHub Issues](https://github.com/animalmatsuzawa/mimizam/issues) で問題を報告
 2. [テストスイート](./22_testing.md) で環境確認
 3. [FAQ](./27_faq.md) で既知の問題を確認

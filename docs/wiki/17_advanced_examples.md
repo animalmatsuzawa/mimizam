@@ -1,17 +1,60 @@
-# 高度な使用例
+# 17. 高度な使用例
 
-mimizamの高度な機能を活用した実践的な使用例を紹介します。カスタムパラメータ調整、複数バックエンドの活用、バッチ処理、パフォーマンス最適化など、実際のプロダクション環境で役立つ高度なテクニックを詳しく解説します。
+mimizamの高度な機能を活用した実践的な使用例を紹介します。
 
-## 🎛️ カスタムパラメータ調整
+## 🎛️ 適応的パラメータ調整
 
-### 音声特性に応じたパラメータ最適化
+### AdaptiveParameterTunerを使用した音声特性に応じた最適化
 
 ```python
-from mimizam import AudioFingerprinter, create_mimizam_sqlite
+from mimizam import AudioFingerprinter, AdaptiveParameterTuner
 import numpy as np
 import librosa
 
-class CustomParameterOptimizer:
+# 適応的パラメータ調整を有効にしたFingerprinter
+fingerprinter = AudioFingerprinter(
+    n_fft=2048,
+    hop_length=512,
+    sr=22050,
+    enable_adaptive_params=True  # 適応的パラメータ調整を有効化
+)
+
+# 音声ファイルを読み込み
+audio, sr = librosa.load("test_audio.wav", sr=22050)
+
+# フィンガープリント生成（自動的にパラメータが調整される）
+fingerprints = fingerprinter.fingerprint_audio(audio, debug=True)
+
+print(f"生成されたフィンガープリント数: {len(fingerprints)}")
+
+### 手動でのパラメータ調整
+
+```python
+from mimizam import AdaptiveParameterTuner
+
+# パラメータチューナーを作成
+tuner = AdaptiveParameterTuner()
+
+# 音声特性を分析
+characteristics = tuner.analyze_audio_characteristics(audio, sr=22050)
+
+# パラメータを調整
+adjusted_params = tuner.adjust_parameters(characteristics)
+
+# 調整結果を表示
+summary = tuner.get_parameter_summary(characteristics, adjusted_params)
+print("パラメータ調整結果:")
+print(summary)
+
+# 調整されたパラメータでFingerprinterを作成
+fingerprinter = AudioFingerprinter(
+    n_fft=2048,
+    hop_length=512,
+    sr=22050,
+    min_amplitude=adjusted_params['min_amplitude'],
+    peak_neighborhood_size=adjusted_params['peak_neighborhood_size'],
+    enable_adaptive_params=False  # 手動設定を使用
+)
     """カスタムパラメータ最適化器"""
     
     def __init__(self):

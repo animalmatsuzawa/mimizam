@@ -378,35 +378,78 @@ final_config = merge_configs(DEFAULT_CONFIG, PROFILE_CONFIGS['balanced'], USER_C
 ### メモリ管理
 
 ```python
-class MemoryEfficientProcessor:
-    """メモリ効率的な処理"""
+from mimizam import AudioFingerprinter
+import librosa
+import numpy as np
+
+def process_large_audio_file(file_path: str, chunk_duration: int = 30):
+    """大きな音声ファイルをチャンク単位で処理"""
     
-    def process_large_audio(self, audio_path: str, chunk_size: int = 30):
-        """大きな音声ファイルのチャンク処理"""
-        for chunk in self._load_audio_chunks(audio_path, chunk_size):
-            fingerprints = self.fingerprinter.fingerprint_audio(chunk)
-            self.database.add_fingerprints_batch(fingerprints)
-            # チャンクごとにメモリ解放
-            del chunk, fingerprints
+    fingerprinter = AudioFingerprinter()
+    
+    # 音声ファイルの情報を取得
+    duration = librosa.get_duration(filename=file_path)
+    sr = 22050
+    
+    all_fingerprints = []
+    
+    # チャンク単位で処理
+    for start_time in range(0, int(duration), chunk_duration):
+        end_time = min(start_time + chunk_duration, duration)
+        
+        # チャンクを読み込み
+        audio_chunk, _ = librosa.load(
+            file_path, 
+            sr=sr, 
+            offset=start_time, 
+            duration=chunk_duration
+        )
+        
+        # フィンガープリント生成
+        chunk_fingerprints = fingerprinter.fingerprint_audio(audio_chunk)
+        
+        # 時間オフセットを調整
+        for fp in chunk_fingerprints:
+            fp.time_offset += start_time
+        
+        all_fingerprints.extend(chunk_fingerprints)
+        
+        print(f"処理完了: {start_time}-{end_time}秒 ({len(chunk_fingerprints)}個のフィンガープリント)")
+    
+    return all_fingerprints
 ```
 
 ### 並列処理
 
+複数ファイルの効率的な処理：
+
 ```python
-class ParallelProcessor:
-    """並列処理対応"""
+from concurrent.futures import ThreadPoolExecutor
+from mimizam import create_mimizam_sqlite
+import os
+
+def process_multiple_files(file_paths: list, max_workers: int = None):
+    """複数ファイルの並列処理"""
     
-    def process_multiple_files(self, file_paths: List[str]):
-        """複数ファイルの並列処理"""
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            futures = [
-                executor.submit(self._process_single_file, path)
-                for path in file_paths
-            ]
-            
-            for future in as_completed(futures):
-                result = future.result()
-                # 結果処理
+    if max_workers is None:
+        max_workers = min(len(file_paths), os.cpu_count())
+    
+    mimizam = create_mimizam_sqlite("parallel_processing.db")
+    
+    def process_single_file(file_info):
+        file_path, title, artist = file_info
+        try:
+            song_id = mimizam.add_song(file_path, title, artist)
+            return {'success': True, 'song_id': song_id, 'file_path': file_path}
+        except Exception as e:
+            return {'success': False, 'error': str(e), 'file_path': file_path}
+    
+    # 並列処理実行
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        results = list(executor.map(process_single_file, file_paths))
+    
+    mimizam.close()
+    return results
 ```
 
 ## 🔒 セキュリティアーキテクチャ
@@ -433,33 +476,28 @@ class SecureDatabase:
 
 ## 🔗 拡張性
 
-### プラグインアーキテクチャ
+### 拡張性
+
+mimizamは複数のデータベースバックエンドをサポートし、新しいバックエンドの追加も可能です：
 
 ```python
-class PluginManager:
-    """プラグイン管理"""
-    
-    def __init__(self):
-        self.plugins = {}
-    
-    def register_plugin(self, name: str, plugin_class):
-        """プラグイン登録"""
-        self.plugins[name] = plugin_class
-    
-    def load_plugin(self, name: str, **kwargs):
-        """プラグイン読み込み"""
-        if name in self.plugins:
-            return self.plugins[name](**kwargs)
-        raise ValueError(f"Unknown plugin: {name}")
+from mimizam.database_base import DatabaseBackend, DatabaseConfig
 
-# カスタムバックエンドプラグイン
+# カスタムバックエンドの実装例（概念的）
 class CustomBackend(DatabaseBackend):
     """カスタムデータベースバックエンド"""
-    pass
-
-# プラグイン登録
-plugin_manager = PluginManager()
-plugin_manager.register_plugin('custom_db', CustomBackend)
+    
+    def __init__(self, config: DatabaseConfig):
+        super().__init__(config)
+        # カスタム初期化処理
+    
+    def connect(self) -> bool:
+        # カスタム接続処理
+        return True
+    
+    def create_tables(self) -> bool:
+        # カスタムテーブル作成処理
+        return True
 ```
 
 ## 🔗 関連ドキュメント
