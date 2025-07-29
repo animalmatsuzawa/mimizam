@@ -52,8 +52,18 @@ target_config = DatabaseConfig(
     password='secure_password'
 )
 
-# データベース移行実行
-migrator.migrate(source_config, target_config)
+# データベーススキーマ移行実行
+import subprocess
+
+# スキーマ分析
+result = subprocess.run(['python', 'scripts/migrate_database.py', '--analyze'], 
+                       capture_output=True, text=True)
+print("分析結果:", result.stdout)
+
+# スキーマ移行実行
+result = subprocess.run(['python', 'scripts/migrate_database.py', '--migrate'], 
+                       capture_output=True, text=True)
+print("移行結果:", result.stdout)
 ```
 
 ### コマンドライン使用
@@ -81,99 +91,60 @@ python scripts/migrate_database.py --backup --config production_db.json
 ### データベース構造分析
 
 ```python
-class SchemaAnalyzer:
-    """スキーマ分析器"""
+def analyze_database_schema(db_path: str) -> dict:
+    """データベーススキーマ分析"""
+    from scripts.migrate_database import DatabaseMigrator
     
-    def __init__(self, migrator: DatabaseMigrator):
-        self.migrator = migrator
+    migrator = DatabaseMigrator()
     
-    def analyze_database_schema(self, config: DatabaseConfig) -> dict:
-        """データベーススキーマの詳細分析"""
-        
-        backend = self.migrator._create_backend(config)
-        
-        if not backend.connect():
-            raise ConnectionError(f"データベース接続失敗: {config.backend}")
-        
-        try:
-            schema_info = {
-                'backend_type': config.backend,
-                'tables': self._analyze_tables(backend),
-                'indexes': self._analyze_indexes(backend),
-                'statistics': self._get_database_statistics(backend),
-                'schema_version': self._get_schema_version(backend)
-            }
-            
-            return schema_info
-            
-        finally:
-            backend.disconnect()
+    # SQLiteスキーマチェック
+    schema_info = migrator.check_sqlite_schema(db_path)
     
-    def _analyze_tables(self, backend) -> dict:
-        """テーブル構造分析"""
-        
-        tables_info = {}
-        
-        if hasattr(backend, 'connection'):
-            cursor = backend.connection.cursor()
-            
-            # バックエンド別のテーブル情報取得
-            if backend.__class__.__name__ == 'SQLiteBackend':
-                cursor.execute("""
-                    SELECT name FROM sqlite_master 
-                    WHERE type='table' AND name NOT LIKE 'sqlite_%'
-                """)
-                
-                for (table_name,) in cursor.fetchall():
-                    tables_info[table_name] = self._analyze_sqlite_table(cursor, table_name)
-            
-            elif backend.__class__.__name__ == 'MySQLBackend':
-                cursor.execute("SHOW TABLES")
-                
-                for (table_name,) in cursor.fetchall():
-                    tables_info[table_name] = self._analyze_mysql_table(cursor, table_name)
-        
-        return tables_info
+    return {
+        'database_path': db_path,
+        'schema_status': schema_info,
+        'analysis_method': 'command_line_tool'
+    }
+
+def get_database_statistics(db_path: str) -> dict:
+    """データベース統計情報取得"""
+    import sqlite3
     
-    def _analyze_sqlite_table(self, cursor, table_name: str) -> dict:
-        """SQLiteテーブル分析"""
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
         
-        # テーブル構造取得
-        cursor.execute(f"PRAGMA table_info({table_name})")
-        columns = cursor.fetchall()
+        # テーブル一覧取得
+        cursor.execute("""
+            SELECT name FROM sqlite_master 
+            WHERE type='table' AND name NOT LIKE 'sqlite_%'
+        """)
+        tables = cursor.fetchall()
         
-        # レコード数取得
-        cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
-        row_count = cursor.fetchone()[0]
+        stats = {'tables': {}}
+        for (table_name,) in tables:
+            cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
+            row_count = cursor.fetchone()[0]
+            stats['tables'][table_name] = {'row_count': row_count}
         
-        return {
-            'columns': [
-                {
-                    'name': col[1],
-                    'type': col[2],
-                    'not_null': bool(col[3]),
-                    'default_value': col[4],
-                    'primary_key': bool(col[5])
-                }
-                for col in columns
-            ],
-            'row_count': row_count
-        }
+        conn.close()
+        return stats
+        
+    except Exception as e:
+        return {'error': str(e)}
 
 # 使用例
-analyzer = SchemaAnalyzer(migrator)
-
-# スキーマ分析実行
-schema_info = analyzer.analyze_database_schema(source_config)
+schema_info = analyze_database_schema('music.db')
+stats = get_database_statistics('music.db')
 
 print("=== データベーススキーマ分析結果 ===")
-print(f"バックエンド: {schema_info['backend_type']}")
-print(f"テーブル数: {len(schema_info['tables'])}")
+print(f"データベース: {schema_info['database_path']}")
+print(f"スキーマ状態: {schema_info['schema_status']}")
 
-for table_name, table_info in schema_info['tables'].items():
-    print(f"\nテーブル: {table_name}")
-    print(f"  カラム数: {len(table_info['columns'])}")
-    print(f"  レコード数: {table_info['row_count']:,}")
+if 'tables' in stats:
+    print(f"テーブル数: {len(stats['tables'])}")
+    for table_name, table_info in stats['tables'].items():
+        print(f"  {table_name}: {table_info['row_count']:,}件")
 ```
 
 ## 🔄 データ移行機能
@@ -181,133 +152,72 @@ for table_name, table_info in schema_info['tables'].items():
 ### 高度な移行処理
 
 ```python
-class AdvancedMigrator(DatabaseMigrator):
-    """高度なデータ移行器"""
+def migrate_with_progress(source_db_path: str, progress_callback=None) -> dict:
+    """進捗監視付きデータ移行"""
+    import time
+    import subprocess
+    from scripts.migrate_database import DatabaseMigrator
     
-    def __init__(self):
-        super().__init__()
-        self.migration_log = []
-        self.batch_size = 1000
-        self.verify_data = True
+    start_time = time.time()
+    migration_results = {
+        'start_time': start_time,
+        'source_database': source_db_path,
+        'errors': [],
+        'warnings': []
+    }
     
-    def migrate_with_progress(self, source_config: DatabaseConfig, 
-                            target_config: DatabaseConfig,
-                            progress_callback=None) -> dict:
-        """進捗監視付きデータ移行"""
+    try:
+        migrator = DatabaseMigrator()
         
-        import time
-        start_time = time.time()
+        # スキーマチェック
+        if progress_callback:
+            progress_callback(0.2, "スキーマ分析中...")
+        
+        schema_status = migrator.check_sqlite_schema(source_db_path)
+        migration_results['schema_check'] = schema_status
         
         # 移行実行
-        migration_results = {
-            'start_time': start_time,
-            'source_backend': source_config.backend,
-            'target_backend': target_config.backend,
-            'tables_migrated': 0,
-            'records_migrated': 0,
-            'errors': [],
-            'warnings': []
-        }
+        if progress_callback:
+            progress_callback(0.5, "スキーマ移行実行中...")
         
-        try:
-            # バックエンド接続
-            source_backend = self._create_backend(source_config)
-            target_backend = self._create_backend(target_config)
-            
-            if not source_backend.connect():
-                raise ConnectionError("移行元データベース接続失敗")
-            
-            if not target_backend.connect():
-                raise ConnectionError("移行先データベース接続失敗")
-            
-            # スキーマ作成
-            if not target_backend.create_tables():
-                raise RuntimeError("移行先テーブル作成失敗")
-            
-            # データ移行実行
-            self._migrate_data_with_batches(
-                source_backend, target_backend, 
-                migration_results, progress_callback
-            )
-            
-            # 移行検証
-            if self.verify_data:
-                verification_results = self._verify_migration(
-                    source_backend, target_backend
-                )
-                migration_results['verification'] = verification_results
-            
-        except Exception as e:
-            migration_results['errors'].append(str(e))
-            raise
+        migration_status = migrator._migrate_sqlite({'file_path': source_db_path})
+        migration_results['migration_status'] = migration_status
         
-        finally:
-            # 接続クリーンアップ
-            if 'source_backend' in locals():
-                source_backend.disconnect()
-            if 'target_backend' in locals():
-                target_backend.disconnect()
-        
-        migration_results['end_time'] = time.time()
-        migration_results['duration'] = migration_results['end_time'] - start_time
-        
-        return migration_results
+        if progress_callback:
+            progress_callback(1.0, "移行完了")
+            
+    except Exception as e:
+        migration_results['errors'].append(str(e))
+        raise
     
-    def create_backup(self, config: DatabaseConfig, backup_path: str) -> bool:
-        """データベースバックアップ作成"""
-        
-        try:
-            backend = self._create_backend(config)
-            
-            if not backend.connect():
-                raise ConnectionError("バックアップ対象データベース接続失敗")
-            
-            # バックアップ実行
-            if config.backend == 'sqlite':
-                return self._backup_sqlite(backend, backup_path)
-            elif config.backend == 'mysql':
-                return self._backup_mysql(backend, backup_path)
-            else:
-                print(f"バックアップ未対応: {config.backend}")
-                return False
-                
-        except Exception as e:
-            print(f"バックアップエラー: {e}")
-            return False
-        
-        finally:
-            if 'backend' in locals():
-                backend.disconnect()
+    migration_results['end_time'] = time.time()
+    migration_results['duration'] = migration_results['end_time'] - start_time
     
-    def _backup_sqlite(self, backend, backup_path: str) -> bool:
-        """SQLiteバックアップ"""
-        
-        import shutil
-        
-        try:
-            # ファイルコピーによるバックアップ
-            source_path = backend.db_path
-            shutil.copy2(source_path, backup_path)
-            
-            print(f"SQLiteバックアップ完了: {backup_path}")
-            return True
-            
-        except Exception as e:
-            print(f"SQLiteバックアップエラー: {e}")
-            return False
+    return migration_results
+
+def create_database_backup(db_path: str, backup_path: str) -> bool:
+    """データベースバックアップ作成"""
+    import shutil
+    
+    try:
+        shutil.copy2(db_path, backup_path)
+        print(f"バックアップ完了: {backup_path}")
+        return True
+    except Exception as e:
+        print(f"バックアップエラー: {e}")
+        return False
 
 # 使用例
-advanced_migrator = AdvancedMigrator()
-
-# 進捗監視付き移行
 def progress_callback(progress, message):
     print(f"進捗: {progress*100:.1f}% - {message}")
 
-migration_results = advanced_migrator.migrate_with_progress(
-    source_config, target_config, progress_callback
-)
+# バックアップ作成
+backup_success = create_database_backup('music.db', 'music_backup.db')
 
-print(f"移行結果: {migration_results}")
+# 進捗監視付き移行
+if backup_success:
+    migration_results = migrate_with_progress('music.db', progress_callback)
+    print(f"移行結果: {migration_results}")
 ```
 
 ## 🔗 関連ドキュメント

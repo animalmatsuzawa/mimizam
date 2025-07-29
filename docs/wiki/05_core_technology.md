@@ -353,105 +353,114 @@ def calculate_collision_rate(fingerprints):
 ### 音声特性分析
 
 ```python
-class AudioCharacteristicsAnalyzer:
-    """音声特性分析器"""
+def analyze_audio_characteristics(audio: np.ndarray, sr: int) -> dict:
+    """音声特性分析"""
+    import librosa
+    import numpy as np
     
-    def analyze_comprehensive(self, audio: np.ndarray, sr: int) -> dict:
-        """包括的音声特性分析"""
-        characteristics = {}
-        
-        # 基本統計
-        characteristics['duration'] = len(audio) / sr
-        characteristics['rms_energy'] = np.sqrt(np.mean(audio**2))
-        characteristics['zero_crossing_rate'] = self._calculate_zcr(audio)
-        
-        # スペクトル特性
-        characteristics.update(self._analyze_spectral_features(audio, sr))
-        
-        # 時間的特性
-        characteristics.update(self._analyze_temporal_features(audio, sr))
-        
-        # 複雑度指標
-        characteristics['spectral_complexity'] = self._calculate_spectral_complexity(audio, sr)
-        characteristics['harmonic_ratio'] = self._calculate_harmonic_ratio(audio, sr)
-        
-        return characteristics
+    characteristics = {}
     
-    def _analyze_spectral_features(self, audio: np.ndarray, sr: int) -> dict:
-        """スペクトル特性分析"""
-        # MFCC特徴量
-        mfccs = librosa.feature.mfcc(y=audio, sr=sr, n_mfcc=13)
-        
-        # スペクトル特性
-        spectral_centroids = librosa.feature.spectral_centroid(y=audio, sr=sr)[0]
-        spectral_rolloff = librosa.feature.spectral_rolloff(y=audio, sr=sr)[0]
-        spectral_bandwidth = librosa.feature.spectral_bandwidth(y=audio, sr=sr)[0]
-        
-        return {
-            'mfcc_mean': np.mean(mfccs, axis=1),
-            'mfcc_std': np.std(mfccs, axis=1),
-            'spectral_centroid_mean': np.mean(spectral_centroids),
-            'spectral_rolloff_mean': np.mean(spectral_rolloff),
-            'spectral_bandwidth_mean': np.mean(spectral_bandwidth)
-        }
+    # 基本統計
+    characteristics['duration'] = len(audio) / sr
+    characteristics['rms_energy'] = np.sqrt(np.mean(audio**2))
+    characteristics['zero_crossing_rate'] = calculate_zcr(audio)
     
-    def _calculate_spectral_complexity(self, audio: np.ndarray, sr: int) -> float:
-        """スペクトル複雑度計算"""
-        # スペクトログラム計算
-        stft = librosa.stft(audio)
-        magnitude = np.abs(stft)
-        
-        # エントロピーベースの複雑度
-        normalized_mag = magnitude / (np.sum(magnitude, axis=0, keepdims=True) + 1e-10)
-        entropy = -np.sum(normalized_mag * np.log(normalized_mag + 1e-10), axis=0)
-        
-        return np.mean(entropy)
+    # スペクトル特性
+    characteristics.update(analyze_spectral_features(audio, sr))
+    
+    # 複雑度指標
+    characteristics['spectral_complexity'] = calculate_spectral_complexity(audio, sr)
+    
+    return characteristics
+
+def analyze_spectral_features(audio: np.ndarray, sr: int) -> dict:
+    """スペクトル特性分析"""
+    import librosa
+    import numpy as np
+    
+    # MFCC特徴量
+    mfccs = librosa.feature.mfcc(y=audio, sr=sr, n_mfcc=13)
+    
+    # スペクトル特性
+    spectral_centroids = librosa.feature.spectral_centroid(y=audio, sr=sr)[0]
+    spectral_rolloff = librosa.feature.spectral_rolloff(y=audio, sr=sr)[0]
+    spectral_bandwidth = librosa.feature.spectral_bandwidth(y=audio, sr=sr)[0]
+    
+    return {
+        'mfcc_mean': np.mean(mfccs, axis=1),
+        'mfcc_std': np.std(mfccs, axis=1),
+        'spectral_centroid_mean': np.mean(spectral_centroids),
+        'spectral_rolloff_mean': np.mean(spectral_rolloff),
+        'spectral_bandwidth_mean': np.mean(spectral_bandwidth)
+    }
+
+def calculate_spectral_complexity(audio: np.ndarray, sr: int) -> float:
+    """スペクトル複雑度計算"""
+    import librosa
+    import numpy as np
+    
+    # スペクトログラム計算
+    stft = librosa.stft(audio)
+    magnitude = np.abs(stft)
+    
+    # エントロピーベースの複雑度
+    normalized_mag = magnitude / (np.sum(magnitude, axis=0, keepdims=True) + 1e-10)
+    entropy = -np.sum(normalized_mag * np.log(normalized_mag + 1e-10), axis=0)
+    
+    return np.mean(entropy)
+
+def calculate_zcr(audio: np.ndarray) -> float:
+    """ゼロ交差率計算"""
+    import numpy as np
+    return np.mean(np.abs(np.diff(np.sign(audio)))) / 2
 ```
 
 ### 動的パラメータ調整
 
 ```python
-class DynamicParameterAdjuster:
-    """動的パラメータ調整器"""
+def adjust_parameters_dynamically(characteristics: dict) -> dict:
+    """動的パラメータ調整"""
+    from mimizam import AdaptiveParameterTuner
     
-    def __init__(self):
-        self.adjustment_rules = {
-            'high_complexity': {
-                'min_amplitude': -70,
-                'peak_neighborhood_size': 30,
-                'target_zone_size': (2, 15)
-            },
-            'low_complexity': {
-                'min_amplitude': -50,
-                'peak_neighborhood_size': 15,
-                'target_zone_size': (1, 8)
-            },
-            'noisy_environment': {
-                'min_amplitude': -40,
-                'peak_neighborhood_size': 25,
-                'target_zone_size': (1, 5)
-            }
+    tuner = AdaptiveParameterTuner()
+    
+    # 音声特性に基づく最適化
+    # AdaptiveParameterTunerの実際のメソッドを使用
+    adjustment_rules = {
+        'high_complexity': {
+            'min_amplitude': -70,
+            'peak_neighborhood_size': 30,
+            'target_zone_size': (2, 15)
+        },
+        'low_complexity': {
+            'min_amplitude': -50,
+            'peak_neighborhood_size': 15,
+            'target_zone_size': (1, 8)
+        },
+        'noisy_environment': {
+            'min_amplitude': -40,
+            'peak_neighborhood_size': 25,
+            'target_zone_size': (1, 5)
         }
+    }
     
-    def adjust_parameters(self, characteristics: dict) -> dict:
-        """特性に基づくパラメータ調整"""
-        adjusted_params = {}
-        
-        # 複雑度に基づく調整
-        if characteristics['spectral_complexity'] > 0.8:
-            adjusted_params.update(self.adjustment_rules['high_complexity'])
-        elif characteristics['spectral_complexity'] < 0.3:
-            adjusted_params.update(self.adjustment_rules['low_complexity'])
-        
-        # ノイズレベルに基づく調整
-        if characteristics['zero_crossing_rate'] > 0.1:
-            adjusted_params.update(self.adjustment_rules['noisy_environment'])
-        
-        # エネルギーレベルに基づく調整
-        if characteristics['rms_energy'] < 0.01:  # 低エネルギー
-            adjusted_params['min_amplitude'] = adjusted_params.get('min_amplitude', -60) - 10
-        
-        return adjusted_params
+    adjusted_params = {}
+    
+    # 複雑度に基づく調整
+    if characteristics.get('spectral_complexity', 0) > 0.8:
+        adjusted_params.update(adjustment_rules['high_complexity'])
+    elif characteristics.get('spectral_complexity', 0) < 0.3:
+        adjusted_params.update(adjustment_rules['low_complexity'])
+    
+    # ノイズレベルに基づく調整
+    if characteristics.get('zero_crossing_rate', 0) > 0.1:
+        adjusted_params.update(adjustment_rules['noisy_environment'])
+    
+    # エネルギーレベルに基づく調整
+    if characteristics.get('rms_energy', 0) < 0.01:
+        adjusted_params['min_amplitude'] = adjusted_params.get('min_amplitude', -60) - 10
+    
+    return adjusted_params
 ```
 
 ## 🔗 関連ドキュメント

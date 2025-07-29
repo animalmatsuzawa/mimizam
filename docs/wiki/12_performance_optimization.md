@@ -135,23 +135,22 @@ SQLITE_OPTIMIZATIONS = {
 }
 
 # カスタムSQLite最適化
-from mimizam.backends.sqlite_backend import SQLiteBackend
-
-class OptimizedSQLiteBackend(SQLiteBackend):
-    """最適化されたSQLiteバックエンド"""
+def create_optimized_sqlite_config(db_path: str = 'optimized_music.db') -> dict:
+    """最適化されたSQLite設定を作成"""
+    from mimizam import create_sqlite_config
     
-    def connect(self) -> bool:
-        if super().connect():
-            cursor = self.connection.cursor()
-            
-            # 追加の最適化設定
-            cursor.execute("PRAGMA page_size = 4096")        # ページサイズ
-            cursor.execute("PRAGMA auto_vacuum = INCREMENTAL") # 自動バキューム
-            cursor.execute("PRAGMA wal_autocheckpoint = 1000") # WALチェックポイント
-            cursor.execute("PRAGMA busy_timeout = 30000")     # ビジータイムアウト
-            
-            return True
-        return False
+    # 基本設定作成
+    config = create_sqlite_config(db_path)
+    
+    # 最適化設定を追加
+    optimization_settings = {
+        'page_size': 4096,
+        'auto_vacuum': 'INCREMENTAL',
+        'wal_autocheckpoint': 1000,
+        'busy_timeout': 30000
+    }
+    
+    return {**config, **optimization_settings}
 ```
 
 ### MySQL最適化設定
@@ -228,58 +227,48 @@ import numpy as np
 from typing import Dict, List
 import gc
 
-class MemoryPool:
-    """メモリプール管理"""
+def create_memory_pool_config(initial_size: int = 1000) -> dict:
+    """メモリプール管理設定"""
+    from mimizam import Peak
+    import numpy as np
     
-    def __init__(self, initial_size: int = 1000):
-        self.pools: Dict[str, List] = {
-            'peaks': [],
-            'fingerprints': [],
-            'audio_buffers': []
-        }
-        self.initial_size = initial_size
-        self._initialize_pools()
+    pool_config = {
+        'initial_size': initial_size,
+        'peak_pool_size': initial_size,
+        'audio_buffer_pool_size': 100,
+        'buffer_size': 22050
+    }
     
-    def _initialize_pools(self):
-        """プールの初期化"""
-        # Peakオブジェクトプール
-        for _ in range(self.initial_size):
-            self.pools['peaks'].append(Peak(0.0, 0.0, 0.0))
-        
-        # 音声バッファプール
-        for _ in range(100):
-            self.pools['audio_buffers'].append(np.zeros(22050, dtype=np.float32))
-    
-    def get_peak(self) -> Peak:
-        """Peakオブジェクトを取得"""
-        if self.pools['peaks']:
-            return self.pools['peaks'].pop()
-        else:
-            return Peak(0.0, 0.0, 0.0)
-    
-    def return_peak(self, peak: Peak):
-        """Peakオブジェクトを返却"""
-        peak.time = 0.0
-        peak.frequency = 0.0
-        peak.amplitude = 0.0
-        self.pools['peaks'].append(peak)
-    
-    def get_audio_buffer(self, size: int) -> np.ndarray:
-        """音声バッファを取得"""
-        for buffer in self.pools['audio_buffers']:
-            if len(buffer) >= size:
-                self.pools['audio_buffers'].remove(buffer)
-                return buffer[:size]
-        
-        return np.zeros(size, dtype=np.float32)
-    
-    def return_audio_buffer(self, buffer: np.ndarray):
-        """音声バッファを返却"""
-        buffer.fill(0)
-        self.pools['audio_buffers'].append(buffer)
+    return pool_config
 
-# グローバルメモリプール
-memory_pool = MemoryPool()
+def initialize_memory_pools(config: dict) -> dict:
+    """メモリプールの初期化"""
+    from mimizam import Peak
+    import numpy as np
+    
+    pools = {
+        'peaks': [],
+        'audio_buffers': []
+    }
+    
+    # Peakオブジェクトプール
+    for _ in range(config['peak_pool_size']):
+        pools['peaks'].append(Peak(0.0, 0.0, 0.0))
+    
+    # 音声バッファプール
+    for _ in range(config['audio_buffer_pool_size']):
+        pools['audio_buffers'].append(np.zeros(config['buffer_size'], dtype=np.float32))
+    
+    return pools
+
+# メモリプール使用例
+def use_memory_pools():
+    """メモリプールの使用例"""
+    config = create_memory_pool_config(1000)
+    pools = initialize_memory_pools(config)
+    
+    print(f"Peakプール: {len(pools['peaks'])}個")
+    print(f"音声バッファプール: {len(pools['audio_buffers'])}個")
 ```
 
 ## 🔄 並列処理最適化

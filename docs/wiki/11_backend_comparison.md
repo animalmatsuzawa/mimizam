@@ -429,7 +429,15 @@ target_config = DatabaseConfig(
 )
 
 # 移行実行
-migrator.migrate(source_config, target_config)
+import subprocess
+
+# スキーマ分析
+result = subprocess.run(['python', 'scripts/migrate_database.py', '--analyze'], 
+                       capture_output=True, text=True)
+
+# スキーマ移行実行  
+result = subprocess.run(['python', 'scripts/migrate_database.py', '--migrate'], 
+                       capture_output=True, text=True)
 ```
 
 ### 移行時の考慮事項

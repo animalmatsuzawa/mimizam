@@ -424,17 +424,21 @@ class TestMySQLContainers(unittest.TestCase):
 - 検証機能
 """
 
-class DatabaseMigrator:
-    """データベース移行器"""
+def analyze_database_schema():
+    """データベーススキーマ分析"""
+    import subprocess
     
-    def analyze_schema(self, config: DatabaseConfig):
-        """スキーマ分析"""
-        pass
+    result = subprocess.run(['python', 'scripts/migrate_database.py', '--analyze'], 
+                           capture_output=True, text=True)
+    return result.stdout
+
+def migrate_database_schema():
+    """データベーススキーマ移行"""
+    import subprocess
     
-    def migrate_data(self, source_config: DatabaseConfig, 
-                    target_config: DatabaseConfig):
-        """データ移行"""
-        pass
+    result = subprocess.run(['python', 'scripts/migrate_database.py', '--migrate'], 
+                           capture_output=True, text=True)
+    return result.stdout
 ```
 
 ### 設定ファイル

@@ -38,36 +38,91 @@ import numpy as np
 from typing import Dict, List, Any
 import matplotlib.pyplot as plt
 
-class PerformanceAnalyzer:
-    """パフォーマンス分析器"""
+def analyze_fingerprint_generation(audio_files: List[str], 
+                                   fingerprinter_configs: Dict[str, Dict]) -> Dict:
+    """指紋生成性能の詳細分析"""
+    from mimizam import PerformanceMonitor
     
-    def __init__(self):
-        self.monitor = PerformanceMonitor()
-        self.metrics_history = []
-        self.system_metrics = []
+    monitor = PerformanceMonitor()
+    results = {
+        'configurations': {},
+        'summary': {},
+        'recommendations': []
+    }
+    
+    for config_name, config in fingerprinter_configs.items():
+        print(f"設定 '{config_name}' の分析開始...")
         
-    def analyze_fingerprint_generation(self, audio_files: List[str], 
-                                     fingerprinter_configs: Dict[str, Dict]) -> Dict:
-        """指紋生成性能の詳細分析"""
+        config_results = analyze_single_configuration(
+            audio_files, config, config_name, monitor
+        )
         
-        results = {
-            'configurations': {},
-            'summary': {},
-            'recommendations': []
+        results['configurations'][config_name] = config_results
+    
+    # 設定間比較
+    results['summary'] = compare_configurations(results['configurations'])
+    results['recommendations'] = generate_recommendations(results['summary'])
+    
+    return results
+
+def analyze_single_configuration(audio_files: List[str], config: dict, 
+                               config_name: str, monitor) -> dict:
+    """単一設定の分析"""
+    from mimizam import AudioFingerprinter
+    import time
+    
+    fingerprinter = AudioFingerprinter(**config)
+    results = {
+        'config_name': config_name,
+        'processing_times': [],
+        'fingerprint_counts': [],
+        'memory_usage': []
+    }
+    
+    for audio_file in audio_files:
+        start_time = time.time()
+        fingerprints = fingerprinter.fingerprint_file(audio_file)
+        processing_time = time.time() - start_time
+        
+        results['processing_times'].append(processing_time)
+        results['fingerprint_counts'].append(len(fingerprints))
+        
+        # メモリ使用量取得
+        metrics = monitor.get_metrics()
+        if 'memory_usage' in metrics:
+            results['memory_usage'].append(metrics['memory_usage'])
+    
+    return results
+
+def compare_configurations(configurations: dict) -> dict:
+    """設定間比較"""
+    import numpy as np
+    
+    summary = {}
+    for config_name, config_results in configurations.items():
+        summary[config_name] = {
+            'avg_processing_time': np.mean(config_results['processing_times']),
+            'avg_fingerprint_count': np.mean(config_results['fingerprint_counts']),
+            'total_files_processed': len(config_results['processing_times'])
         }
-        
-        for config_name, config in fingerprinter_configs.items():
-            print(f"設定 '{config_name}' の分析開始...")
-            
-            config_results = self._analyze_single_configuration(
-                audio_files, config, config_name
-            )
-            
-            results['configurations'][config_name] = config_results
-        
-        # 設定間比較
-        results['summary'] = self._compare_configurations(results['configurations'])
-        results['recommendations'] = self._generate_recommendations(results['summary'])
+    
+    return summary
+
+def generate_recommendations(summary: dict) -> list:
+    """推奨事項生成"""
+    recommendations = []
+    
+    # 最速設定を特定
+    fastest_config = min(summary.keys(), 
+                        key=lambda k: summary[k]['avg_processing_time'])
+    recommendations.append(f"最速設定: {fastest_config}")
+    
+    # 最多指紋生成設定を特定
+    most_fingerprints_config = max(summary.keys(),
+                                  key=lambda k: summary[k]['avg_fingerprint_count'])
+    recommendations.append(f"最多指紋生成設定: {most_fingerprints_config}")
+    
+    return recommendations
         
         return results
     
@@ -280,44 +335,117 @@ for rec in results['recommendations']:
 ### 検索性能分析
 
 ```python
-class DatabasePerformanceAnalyzer:
-    """データベース性能分析器"""
+def analyze_search_performance(mimizam_instances: Dict, 
+                             query_files: List[str],
+                             confidence_levels: List[float] = None) -> Dict:
+    """検索性能の詳細分析"""
     
-    def __init__(self):
-        self.query_metrics = []
+    if confidence_levels is None:
+        confidence_levels = [0.1, 0.3, 0.5, 0.7, 0.9]
+    
+    results = {
+        'backends': {},
+        'confidence_analysis': {},
+        'scalability_analysis': {}
+    }
+    
+    for backend_name, mimizam in mimizam_instances.items():
+        print(f"バックエンド '{backend_name}' の分析開始...")
         
-    def analyze_search_performance(self, mimizam_instances: Dict, 
-                                 query_files: List[str],
-                                 confidence_levels: List[float] = None) -> Dict:
-        """検索性能の詳細分析"""
+        backend_results = analyze_backend_performance(
+            mimizam, query_files, confidence_levels, backend_name
+        )
         
-        if confidence_levels is None:
-            confidence_levels = [0.1, 0.3, 0.5, 0.7, 0.9]
+        results['backends'][backend_name] = backend_results
+    
+    # 信頼度レベル別分析
+    results['confidence_analysis'] = analyze_confidence_impact(
+        results['backends'], confidence_levels
+    )
+    
+    # スケーラビリティ分析
+    results['scalability_analysis'] = analyze_scalability(
+        results['backends']
+    )
+    
+    return results
+
+def analyze_backend_performance(mimizam_instance, query_files: List[str],
+                              confidence_levels: List[float], backend_name: str) -> dict:
+    """バックエンド性能分析"""
+    import time
+    
+    results = {
+        'backend_name': backend_name,
+        'query_results': [],
+        'performance_metrics': {}
+    }
+    
+    total_queries = 0
+    total_time = 0
+    
+    for query_file in query_files:
+        for confidence in confidence_levels:
+            start_time = time.time()
+            matches = mimizam_instance.recognize_file(query_file, confidence_threshold=confidence)
+            query_time = time.time() - start_time
+            
+            results['query_results'].append({
+                'file': query_file,
+                'confidence': confidence,
+                'matches': len(matches) if matches else 0,
+                'query_time': query_time
+            })
+            
+            total_queries += 1
+            total_time += query_time
+    
+    results['performance_metrics'] = {
+        'avg_query_time': total_time / total_queries if total_queries > 0 else 0,
+        'total_queries': total_queries,
+        'queries_per_second': total_queries / total_time if total_time > 0 else 0
+    }
+    
+    return results
+
+def analyze_confidence_impact(backends: dict, confidence_levels: List[float]) -> dict:
+    """信頼度レベル別分析"""
+    confidence_analysis = {}
+    
+    for confidence in confidence_levels:
+        confidence_analysis[confidence] = {}
         
-        results = {
-            'backends': {},
-            'confidence_analysis': {},
-            'scalability_analysis': {}
+        for backend_name, backend_results in backends.items():
+            confidence_queries = [
+                q for q in backend_results['query_results'] 
+                if q['confidence'] == confidence
+            ]
+            
+            if confidence_queries:
+                avg_matches = sum(q['matches'] for q in confidence_queries) / len(confidence_queries)
+                avg_time = sum(q['query_time'] for q in confidence_queries) / len(confidence_queries)
+                
+                confidence_analysis[confidence][backend_name] = {
+                    'avg_matches': avg_matches,
+                    'avg_query_time': avg_time
+                }
+    
+    return confidence_analysis
+
+def analyze_scalability(backends: dict) -> dict:
+    """スケーラビリティ分析"""
+    scalability_analysis = {}
+    
+    for backend_name, backend_results in backends.items():
+        metrics = backend_results['performance_metrics']
+        
+        scalability_analysis[backend_name] = {
+            'queries_per_second': metrics.get('queries_per_second', 0),
+            'avg_query_time': metrics.get('avg_query_time', 0),
+            'scalability_score': metrics.get('queries_per_second', 0) * 100  # 簡易スコア
         }
-        
-        for backend_name, mimizam in mimizam_instances.items():
-            print(f"バックエンド '{backend_name}' の分析開始...")
-            
-            backend_results = self._analyze_backend_performance(
-                mimizam, query_files, confidence_levels, backend_name
-            )
-            
-            results['backends'][backend_name] = backend_results
-        
-        # 信頼度レベル別分析
-        results['confidence_analysis'] = self._analyze_confidence_impact(
-            results['backends'], confidence_levels
-        )
-        
-        # スケーラビリティ分析
-        results['scalability_analysis'] = self._analyze_scalability(
-            results['backends']
-        )
+    
+    return scalability_analysis
         
         return results
     
