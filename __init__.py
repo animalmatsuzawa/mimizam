@@ -31,7 +31,7 @@ from .src.fingerprint_database import (
 from .src.database_base import DatabaseConfig, Song, Fingerprint
 from .src.adaptive_parameters import AdaptiveParameterTuner,PerformanceMonitor
 
-__version__ = "1.0.0"
+__version__ = "1.0.3"
 
 __all__ = [
     # メインAPI
