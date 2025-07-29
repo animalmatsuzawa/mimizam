@@ -103,7 +103,7 @@ print(f"検索結果: {results}")
 4. **ハッシュ生成**: 特徴点から固有のハッシュ値を計算
 5. **高速検索**: ハッシュテーブルによる高速マッチング
 
-詳細は[指紋生成詳細](./13_fingerprint_generation.md)を参照してください。
+詳細は[システムアーキテクチャ](./04_architecture.md)を参照してください。
 
 ### Q7: なぜNumba最適化を使用するのですか？
 
@@ -365,73 +365,7 @@ mimizam = create_mimizam_mysql(
 
 ## 🔄 データ管理
 
-### Q15: データベースをバックアップするにはどうすればよいですか？
 
-**A:** バックエンド別のバックアップ方法：
-
-**SQLite:**
-```python
-import shutil
-import datetime
-
-def backup_sqlite(db_path):
-    """SQLiteバックアップ"""
-    
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup_path = f"{db_path}.backup_{timestamp}"
-    
-    shutil.copy2(db_path, backup_path)
-    print(f"バックアップ作成: {backup_path}")
-    
-    return backup_path
-```
-
-**MySQL:**
-```python
-import subprocess
-
-def backup_mysql(host, database, username, password, output_file):
-    """MySQLバックアップ"""
-    
-    cmd = [
-        'mysqldump',
-        f'--host={host}',
-        f'--user={username}',
-        f'--password={password}',
-        database
-    ]
-    
-    with open(output_file, 'w') as f:
-        subprocess.run(cmd, stdout=f, check=True)
-    
-    print(f"MySQLバックアップ作成: {output_file}")
-```
-
-### Q16: データベース間でデータを移行するにはどうすればよいですか？
-
-**A:** 現在、mimizamには自動的なデータベース間移行機能はありません。手動でデータを移行する場合は、以下の手順を参考にしてください：
-
-```python
-# 移行元からデータを取得
-source_mimizam = create_mimizam_sqlite("source.db")
-songs = source_mimizam.list_songs()
-
-# 移行先に手動でデータを追加
-target_mimizam = create_mimizam_mysql(
-    host="localhost",
-    database="target_db",
-    username="user", 
-    password="password"
-)
-
-# 各楽曲を個別に追加
-for song in songs:
-    target_mimizam.add_song(
-        file_path=song['file_path'],
-        title=song['title'],
-        artist=song['artist']
-    )
-```
 
 ## 🎵 音声処理
 
@@ -477,46 +411,6 @@ if converted_path:
     os.unlink(converted_path)  # 一時ファイル削除
 ```
 
-### Q18: 音声の品質が低い場合の対処法は？
-
-**A:** 以下の前処理を試してください：
-
-```python
-import librosa
-import numpy as np
-from scipy import signal
-
-def enhance_audio_quality(audio, sr=22050):
-    """音声品質向上"""
-    
-    # 1. ノイズ除去（簡易版）
-    # スペクトラルサブトラクション
-    S = librosa.stft(audio)
-    magnitude = np.abs(S)
-    phase = np.angle(S)
-    
-    # ノイズ推定（最初の0.5秒）
-    noise_frame_count = int(0.5 * sr / 512)
-    noise_spectrum = np.mean(magnitude[:, :noise_frame_count], axis=1, keepdims=True)
-    
-    # スペクトラルサブトラクション
-    alpha = 2.0  # サブトラクション係数
-    enhanced_magnitude = magnitude - alpha * noise_spectrum
-    enhanced_magnitude = np.maximum(enhanced_magnitude, 0.1 * magnitude)
-    
-    # 音声復元
-    enhanced_S = enhanced_magnitude * np.exp(1j * phase)
-    enhanced_audio = librosa.istft(enhanced_S)
-    
-    # 2. 正規化
-    enhanced_audio = enhanced_audio / np.max(np.abs(enhanced_audio)) * 0.8
-    
-    return enhanced_audio
-
-# 使用例
-enhanced_audio = enhance_audio_quality(original_audio)
-fingerprints = fingerprinter.fingerprint_audio(enhanced_audio)
-```
 
 ## 🔍 デバッグ
 
@@ -545,112 +439,6 @@ logger.setLevel(logging.DEBUG)
 fingerprints = fingerprinter.fingerprint_audio(audio)
 ```
 
-### Q20: 処理が途中で止まってしまいます
-
-**A:** 以下の診断を行ってください：
-
-```python
-import signal
-import time
-
-def setup_timeout_handler(timeout_seconds=30):
-    """タイムアウトハンドラーの設定"""
-    
-    def timeout_handler(signum, frame):
-        raise TimeoutError(f"処理がタイムアウトしました ({timeout_seconds}秒)")
-    
-    def with_timeout(func):
-        """タイムアウト付き関数実行"""
-        def wrapper(*args, **kwargs):
-            # タイムアウト設定
-            signal.signal(signal.SIGALRM, timeout_handler)
-            signal.alarm(timeout_seconds)
-            
-            try:
-                result = func(*args, **kwargs)
-                return result
-            finally:
-                # タイムアウト解除
-                signal.alarm(0)
-        
-        return wrapper
-    
-    return with_timeout
-        self.timeout_seconds = timeout_seconds
-    
-    def __enter__(self):
-        signal.signal(signal.SIGALRM, self._timeout_handler)
-        signal.alarm(self.timeout_seconds)
-        return self
-    
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        signal.alarm(0)
-    
-    def _timeout_handler(self, signum, frame):
-        raise TimeoutError(f"処理がタイムアウトしました ({self.timeout_seconds}秒)")
-
-# 使用例
-try:
-    with TimeoutHandler(timeout_seconds=60):
-        fingerprints = fingerprinter.fingerprint_audio(audio)
-        print(f"指紋生成完了: {len(fingerprints)}個")
-except TimeoutError as e:
-    print(f"タイムアウトエラー: {e}")
-    # 音声を短く分割して再試行
-    chunk_size = len(audio) // 4
-    for i in range(0, len(audio), chunk_size):
-        chunk = audio[i:i+chunk_size]
-        chunk_fingerprints = fingerprinter.fingerprint_audio(chunk)
-        print(f"チャンク {i//chunk_size + 1}: {len(chunk_fingerprints)}個")
-```
-
-## 📊 統計・分析
-
-### Q21: データベースの統計情報を取得するにはどうすればよいですか？
-
-**A:** 統計情報取得の方法：
-
-```python
-def get_database_statistics(mimizam):
-    """データベース統計情報取得"""
-    
-    stats = {
-        'songs': {},
-        'fingerprints': {},
-        'performance': {}
-    }
-    
-    # 楽曲統計
-    songs = mimizam.list_songs()
-    stats['songs'] = {
-        'total_count': len(songs),
-        'artists': len(set(song.artist for song in songs)),
-        'avg_title_length': np.mean([len(song.title) for song in songs])
-    }
-    
-    # 指紋統計（サンプリング）
-    sample_songs = songs[:min(100, len(songs))]
-    fingerprint_counts = []
-    
-    for song in sample_songs:
-        # 楽曲の指紋数を取得（実装依存）
-        count = get_fingerprint_count_for_song(mimizam, song.id)
-        fingerprint_counts.append(count)
-    
-    stats['fingerprints'] = {
-        'avg_per_song': np.mean(fingerprint_counts),
-        'std_per_song': np.std(fingerprint_counts),
-        'estimated_total': np.mean(fingerprint_counts) * len(songs)
-    }
-    
-    return stats
-
-# 使用例
-stats = get_database_statistics(mimizam)
-print(f"楽曲数: {stats['songs']['total_count']}")
-print(f"アーティスト数: {stats['songs']['artists']}")
-print(f"平均指紋数/曲: {stats['fingerprints']['avg_per_song']:.1f}")
-```
 
 ## 🔗 関連ドキュメント
 
