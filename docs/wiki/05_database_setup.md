@@ -443,52 +443,10 @@ with create_mimizam_elasticsearch(
 - キャッシュサイズの調整
 - 同期モードの最適化
 
-## 🔒 セキュリティ考慮事項
-
-1. **データベース認証情報を環境変数で管理**
-   ```python
-   import os
-   
-   password = os.getenv("DB_PASSWORD")
-   if not password:
-       raise ValueError("DB_PASSWORD環境変数が設定されていません")
-   ```
-
-2. **SSL/TLS接続を使用（本番環境）**
-   ```python
-   # MySQL SSL接続
-   with create_mimizam_mysql(
-       host="db.example.com",
-       database="fingerprints_db",
-       username="app_user",
-       password=os.getenv("DB_PASSWORD"),
-       ssl_disabled=False,
-       ssl_ca="/path/to/ca.pem"
-   ) as mimizam:
-       pass
-   ```
-
-3. **最小権限の原則でユーザー権限を設定**
-   ```sql
-   -- 必要最小限の権限のみ付与
-   GRANT SELECT, INSERT, UPDATE, DELETE ON fingerprints_db.* TO 'app_user'@'%';
-   ```
-
-4. **定期的なバックアップの実施**
-   ```bash
-   # MySQL バックアップ
-   mysqldump -u root -p fingerprints_db > backup.sql
-   
-   # PostgreSQL バックアップ
-   pg_dump -U postgres fingerprints_db > backup.sql
-   
-   # SQLite バックアップ
-   cp fingerprints.db fingerprints_backup.db
-   ```
 
 ## 🔗 関連ドキュメント
 
-- [バックエンド比較](./11_backend_comparison.md) - 詳細な性能比較
-- [パフォーマンス最適化](./12_performance_optimization.md) - 最適化テクニック
-- [移行ツール](./19_migration_tools.md) - データベース移行方法
-- [トラブルシューティング](./21_debugging.md) - 詳細なデバッグ情報
+- [基本的な使用方法](./03_basic_usage.md) - 基本操作パターン
+- [システムアーキテクチャ](./04_architecture.md) - 全体構成の理解
+- [基本的な使用例](./06_basic_examples.md) - 実践的なサンプルコード
+- [FAQ](./07_faq.md) - よくある質問とトラブルシューティング

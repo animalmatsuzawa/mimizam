@@ -20,7 +20,7 @@ mimizamは4つの主要レイヤーで構成されています：
 │  ┌─────────────────────────────────────────────────────────┐ │
 │  │                 Mimizam クラス                          │ │
 │  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐      │ │
-│  │  │create_sqlite│  │create_mysql │  │create_postgresql│  │ │
+│  │  │  add_song   │  │ search_song │  │ identify_audio  │  │ │
 │  │  └─────────────┘  └─────────────┘  └─────────────┘      │ │
 │  └─────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────┘
@@ -445,30 +445,6 @@ def process_multiple_files(file_paths: list):
     return results
 ```
 
-## 🔒 セキュリティアーキテクチャ
-
-### データ保護
-
-```python
-def create_secure_database_config(config_dict: dict) -> dict:
-    """セキュアなデータベース設定を作成"""
-    from mimizam import DatabaseConfig
-    
-    # セキュリティ設定を追加
-    secure_config = config_dict.copy()
-    secure_config.update({
-        'use_ssl': True,
-        'ssl_verify': True,
-        'connection_timeout': 30
-    })
-    
-    return secure_config
-    
-    def sanitize_input(self, user_input: str) -> str:
-        """入力サニタイゼーション"""
-        # SQLインジェクション対策
-        return user_input.replace("'", "''").replace(";", "")
-```
 
 ## 🔗 拡張性
 
