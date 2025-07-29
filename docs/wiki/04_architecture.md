@@ -412,44 +412,140 @@ def process_multiple_files(file_paths: list):
 
 ## 🔗 拡張性
 
-### 拡張性
+### 新しいデータベースバックエンドの追加
 
-mimizamは複数のデータベースバックエンドをサポートし、新しいバックエンドの追加も可能です：
+mimizamは新しいデータベースバックエンドの追加をサポートしています。以下はRedisバックエンドを追加する例です：
 
 ```python
 from mimizam.database_base import DatabaseBackend, DatabaseConfig
+import redis
+import json
+from typing import List, Dict, Any
 
-# カスタムバックエンドの実装例（概念的）
-def create_custom_backend_config(backend_type: str) -> dict:
-    """カスタムバックエンド設定を作成"""
+class RedisBackend(DatabaseBackend):
+    """Redis バックエンド実装"""
     
-    # 実際のmimizamバックエンドを使用
-    if backend_type == 'sqlite':
-        from mimizam import create_sqlite_config
-        return create_sqlite_config('custom.db')
-    elif backend_type == 'mysql':
-        from mimizam import create_mysql_config
-        return create_mysql_config(
-            host='localhost',
-            database='custom_db',
-            username='user',
-            password='password'
+    def __init__(self, config: DatabaseConfig):
+        super().__init__(config)
+        self.redis_client = redis.Redis(
+            host=config.host,
+            port=config.port or 6379,
+            db=config.database or 0,
+            password=config.password
         )
-    else:
-        # デフォルトはSQLite
-        from mimizam import create_sqlite_config
-        return create_sqlite_config('default.db')
+        self.song_counter_key = "mimizam:song_counter"
+        self.songs_key = "mimizam:songs"
+        self.fingerprints_key = "mimizam:fingerprints"
+    
+    def create_tables(self):
+        """Redis用の初期化（テーブル作成は不要）"""
+        # Redisでは明示的なテーブル作成は不要
+        # カウンターを初期化
+        if not self.redis_client.exists(self.song_counter_key):
+            self.redis_client.set(self.song_counter_key, 0)
+    
+    def add_song(self, title: str, artist: str, file_path: str, 
+                 album: str = None, meta: str = None) -> int:
+        """楽曲をRedisに追加"""
+        song_id = self.redis_client.incr(self.song_counter_key)
+        
+        song_data = {
+            'id': song_id,
+            'title': title,
+            'artist': artist,
+            'file_path': file_path,
+            'album': album,
+            'meta': meta
+        }
+        
+        # ハッシュとして保存
+        self.redis_client.hset(
+            f"{self.songs_key}:{song_id}",
+            mapping={k: json.dumps(v) for k, v in song_data.items()}
+        )
+        
+        return song_id
+    
+    def add_fingerprints(self, song_id: int, fingerprints: List[Any]):
+        """指紋をRedisに追加"""
+        for fp in fingerprints:
+            # ハッシュ値をキーとして使用
+            hash_key = f"{self.fingerprints_key}:{fp.hash_value}"
+            
+            # 同じハッシュ値の指紋をリストとして保存
+            fingerprint_data = {
+                'song_id': song_id,
+                'time_offset': fp.time_offset
+            }
+            
+            self.redis_client.lpush(hash_key, json.dumps(fingerprint_data))
+    
+    def find_matches(self, query_fingerprints: List[Any]) -> Dict[int, List[Dict]]:
+        """指紋マッチングを実行"""
+        matches = {}
+        
+        for fp in query_fingerprints:
+            hash_key = f"{self.fingerprints_key}:{fp.hash_value}"
+            
+            # マッチする指紋を取得
+            stored_fps = self.redis_client.lrange(hash_key, 0, -1)
+            
+            for stored_fp_json in stored_fps:
+                stored_fp = json.loads(stored_fp_json)
+                song_id = stored_fp['song_id']
+                
+                if song_id not in matches:
+                    matches[song_id] = []
+                
+                matches[song_id].append({
+                    'query_time': fp.time_offset,
+                    'stored_time': stored_fp['time_offset'],
+                    'hash_value': fp.hash_value
+                })
+        
+        return matches
+    
+    def get_song(self, song_id: int) -> Dict[str, Any]:
+        """楽曲情報を取得"""
+        song_data = self.redis_client.hgetall(f"{self.songs_key}:{song_id}")
+        
+        if not song_data:
+            return None
+        
+        # JSON文字列をデコード
+        return {k.decode(): json.loads(v.decode()) 
+                for k, v in song_data.items()}
+    
+    def close(self):
+        """接続を閉じる"""
+        self.redis_client.close()
+
+# Redis設定の作成
+def create_redis_config(host: str = 'localhost', port: int = 6379, 
+                       database: int = 0, password: str = None) -> DatabaseConfig:
+    """Redis用の設定を作成"""
+    return DatabaseConfig(
+        backend='redis',
+        host=host,
+        port=port,
+        database=database,
+        password=password
+    )
 
 # 使用例
-def setup_custom_backend(backend_type: str):
-    """カスタムバックエンドのセットアップ"""
-    config = create_custom_backend_config(backend_type)
+def create_mimizam_redis(host: str = 'localhost', port: int = 6379,
+                        database: int = 0, password: str = None):
+    """Redis版Mimizamインスタンスを作成"""
+    from mimizam import AudioFingerprinter, FingerprintDatabase
+    
+    config = create_redis_config(host, port, database, password)
+    redis_backend = RedisBackend(config)
+    
+    database = FingerprintDatabase(redis_backend)
+    fingerprinter = AudioFingerprinter()
     
     from mimizam import Mimizam
-    mimizam = Mimizam(config)
-    
-    return mimizam
-        return True
+    return Mimizam(database, fingerprinter)
 ```
 
 ## 🔗 関連ドキュメント
