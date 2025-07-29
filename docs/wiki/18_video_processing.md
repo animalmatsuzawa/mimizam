@@ -1,0 +1,733 @@
+# 動画処理
+
+mimizamは動画ファイルから音声を抽出して音声指紋を生成し、動画コンテンツの識別を行うことができます。FFmpegとの連携により、様々な動画形式に対応し、効率的な動画音声処理を実現します。
+
+## 🎬 動画処理の概要
+
+### 対応機能
+
+```
+動画処理システム
+├── 音声抽出
+│   ├── FFmpeg連携
+│   ├── 複数形式対応
+│   └── 品質設定
+├── バッチ処理
+│   ├── ディレクトリ一括処理
+│   ├── 並列処理
+│   └── 進捗監視
+├── 動画検索
+│   ├── 部分マッチング
+│   ├── 時間範囲指定
+│   └── 類似度評価
+└── メタデータ管理
+    ├── 動画情報抽出
+    ├── タイムスタンプ記録
+    └── 検索結果表示
+```
+
+## 🔧 VideoFingerprinter クラス
+
+### 基本的な使用方法
+
+```python
+from mimizam.examples.video_fingerprinter import VideoFingerprinter
+from mimizam import create_mimizam_sqlite
+import os
+
+# 動画指紋生成器の初期化
+video_fingerprinter = VideoFingerprinter(
+    temp_dir="./temp_audio",           # 一時音声ファイル保存先
+    keep_temp_files=False,             # 一時ファイルを保持するか
+    audio_format="wav",                # 抽出音声形式
+    sample_rate=22050,                 # サンプルレート
+    audio_quality="high"               # 音声品質
+)
+
+# データベース接続
+mimizam = create_mimizam_sqlite("video_database.db")
+
+# 動画ファイルの処理
+video_path = "sample_video.mp4"
+song_id = video_fingerprinter.process_video(
+    video_path=video_path,
+    title="Sample Video",
+    artist="Content Creator",
+    mimizam=mimizam
+)
+
+print(f"動画処理完了: {song_id}")
+```
+
+### 対応動画形式
+
+```python
+# 対応する動画形式
+SUPPORTED_VIDEO_FORMATS = {
+    'mp4': 'MPEG-4 Video',
+    'avi': 'Audio Video Interleave',
+    'mov': 'QuickTime Movie',
+    'mkv': 'Matroska Video',
+    'wmv': 'Windows Media Video',
+    'flv': 'Flash Video',
+    'webm': 'WebM Video',
+    'm4v': 'iTunes Video',
+    '3gp': '3GPP Video',
+    'ogv': 'Ogg Video'
+}
+
+# 対応する音声形式（抽出後）
+SUPPORTED_AUDIO_FORMATS = {
+    'wav': 'Waveform Audio',
+    'mp3': 'MPEG Audio Layer III',
+    'flac': 'Free Lossless Audio Codec',
+    'aac': 'Advanced Audio Coding',
+    'ogg': 'Ogg Vorbis'
+}
+```
+
+### FFmpeg連携設定
+
+```python
+class VideoProcessor:
+    """動画処理クラス"""
+    
+    def __init__(self, ffmpeg_path: str = "ffmpeg"):
+        self.ffmpeg_path = ffmpeg_path
+        self.temp_dir = "./temp_audio"
+        self.ensure_temp_directory()
+    
+    def ensure_temp_directory(self):
+        """一時ディレクトリの確保"""
+        os.makedirs(self.temp_dir, exist_ok=True)
+    
+    def extract_audio(self, video_path: str, output_path: str = None) -> str:
+        """動画から音声を抽出"""
+        
+        if output_path is None:
+            video_name = os.path.splitext(os.path.basename(video_path))[0]
+            output_path = os.path.join(self.temp_dir, f"{video_name}.wav")
+        
+        # FFmpegコマンドの構築
+        cmd = [
+            self.ffmpeg_path,
+            '-i', video_path,           # 入力動画
+            '-vn',                      # 動画ストリームを無視
+            '-acodec', 'pcm_s16le',     # 音声コーデック
+            '-ar', '22050',             # サンプルレート
+            '-ac', '1',                 # モノラル
+            '-y',                       # 上書き許可
+            output_path
+        ]
+        
+        try:
+            # FFmpeg実行
+            import subprocess
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            
+            print(f"音声抽出完了: {output_path}")
+            return output_path
+            
+        except subprocess.CalledProcessError as e:
+            print(f"音声抽出エラー: {e}")
+            print(f"FFmpeg出力: {e.stderr}")
+            raise
+    
+    def get_video_info(self, video_path: str) -> dict:
+        """動画情報を取得"""
+        
+        cmd = [
+            'ffprobe',
+            '-v', 'quiet',
+            '-print_format', 'json',
+            '-show_format',
+            '-show_streams',
+            video_path
+        ]
+        
+        try:
+            import subprocess
+            import json
+            
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            
+            info = json.loads(result.stdout)
+            
+            # 動画情報の抽出
+            video_info = {
+                'duration': float(info['format'].get('duration', 0)),
+                'size': int(info['format'].get('size', 0)),
+                'bitrate': int(info['format'].get('bit_rate', 0)),
+                'format_name': info['format'].get('format_name', ''),
+                'streams': []
+            }
+            
+            # ストリーム情報
+            for stream in info['streams']:
+                stream_info = {
+                    'codec_type': stream.get('codec_type'),
+                    'codec_name': stream.get('codec_name'),
+                    'duration': float(stream.get('duration', 0))
+                }
+                
+                if stream['codec_type'] == 'video':
+                    stream_info.update({
+                        'width': stream.get('width'),
+                        'height': stream.get('height'),
+                        'fps': eval(stream.get('r_frame_rate', '0/1'))
+                    })
+                elif stream['codec_type'] == 'audio':
+                    stream_info.update({
+                        'sample_rate': int(stream.get('sample_rate', 0)),
+                        'channels': int(stream.get('channels', 0))
+                    })
+                
+                video_info['streams'].append(stream_info)
+            
+            return video_info
+            
+        except subprocess.CalledProcessError as e:
+            print(f"動画情報取得エラー: {e}")
+            return {}
+
+# 使用例
+processor = VideoProcessor()
+video_info = processor.get_video_info("sample_video.mp4")
+print(f"動画情報: {video_info}")
+
+audio_path = processor.extract_audio("sample_video.mp4")
+print(f"抽出された音声: {audio_path}")
+```
+
+## 🎵 動画音声指紋生成
+
+### 統合動画処理システム
+
+```python
+class VideoFingerprintSystem:
+    """動画指紋システム"""
+    
+    def __init__(self, database_config, temp_dir="./temp_video"):
+        self.processor = VideoProcessor()
+        self.temp_dir = temp_dir
+        
+        # mimizam初期化
+        from mimizam import create_mimizam_sqlite
+        self.mimizam = create_mimizam_sqlite(database_config['file_path'])
+        
+        # 処理統計
+        self.stats = {
+            'processed_videos': 0,
+            'extracted_audio_files': 0,
+            'generated_fingerprints': 0,
+            'processing_errors': 0
+        }
+    
+    def process_video_file(self, video_path: str, title: str = None, 
+                          artist: str = None) -> str:
+        """動画ファイルを処理して指紋を生成"""
+        
+        try:
+            # 動画情報取得
+            video_info = self.processor.get_video_info(video_path)
+            
+            # メタデータの準備
+            if title is None:
+                title = os.path.splitext(os.path.basename(video_path))[0]
+            if artist is None:
+                artist = "Unknown Creator"
+            
+            # 音声抽出
+            audio_path = self.processor.extract_audio(video_path)
+            self.stats['extracted_audio_files'] += 1
+            
+            # 楽曲として追加（音声指紋生成を含む）
+            song_id = self.mimizam.add_song(
+                file_path=audio_path,
+                title=title,
+                artist=artist
+            )
+            
+            # メタデータに動画情報を追加
+            self._update_song_metadata(song_id, video_info, video_path)
+            
+            self.stats['processed_videos'] += 1
+            print(f"動画処理完了: {title} (ID: {song_id})")
+            
+            # 一時ファイルのクリーンアップ
+            if os.path.exists(audio_path):
+                os.remove(audio_path)
+            
+            return song_id
+            
+        except Exception as e:
+            self.stats['processing_errors'] += 1
+            print(f"動画処理エラー {video_path}: {e}")
+            raise
+    
+    def _update_song_metadata(self, song_id: str, video_info: dict, video_path: str):
+        """楽曲メタデータに動画情報を追加"""
+        
+        # 動画固有のメタデータ
+        video_metadata = {
+            'source_type': 'video',
+            'original_video_path': video_path,
+            'video_duration': video_info.get('duration', 0),
+            'video_format': video_info.get('format_name', ''),
+            'video_size': video_info.get('size', 0),
+            'video_bitrate': video_info.get('bitrate', 0)
+        }
+        
+        # 動画ストリーム情報
+        for stream in video_info.get('streams', []):
+            if stream['codec_type'] == 'video':
+                video_metadata.update({
+                    'video_codec': stream.get('codec_name'),
+                    'video_width': stream.get('width'),
+                    'video_height': stream.get('height'),
+                    'video_fps': stream.get('fps')
+                })
+            elif stream['codec_type'] == 'audio':
+                video_metadata.update({
+                    'audio_codec': stream.get('codec_name'),
+                    'audio_sample_rate': stream.get('sample_rate'),
+                    'audio_channels': stream.get('channels')
+                })
+        
+        # メタデータ更新（実装は省略）
+        print(f"メタデータ更新: {video_metadata}")
+    
+    def search_video(self, query_video_path: str, min_confidence: float = 0.3) -> list:
+        """動画による検索"""
+        
+        try:
+            # クエリ動画から音声抽出
+            query_audio_path = self.processor.extract_audio(query_video_path)
+            
+            # 音声検索実行
+            results = self.mimizam.search_song(
+                query_path=query_audio_path,
+                min_confidence=min_confidence
+            )
+            
+            # 一時ファイルクリーンアップ
+            if os.path.exists(query_audio_path):
+                os.remove(query_audio_path)
+            
+            # 結果に動画情報を追加
+            enhanced_results = []
+            for result in results:
+                enhanced_result = result.copy()
+                enhanced_result['query_type'] = 'video'
+                enhanced_result['query_path'] = query_video_path
+                enhanced_results.append(enhanced_result)
+            
+            return enhanced_results
+            
+        except Exception as e:
+            print(f"動画検索エラー: {e}")
+            return []
+    
+    def get_processing_stats(self) -> dict:
+        """処理統計を取得"""
+        return self.stats.copy()
+
+# 使用例
+video_system = VideoFingerprintSystem(
+    database_config={'file_path': 'video_music.db'}
+)
+
+# 動画処理
+song_id = video_system.process_video_file(
+    "music_video.mp4",
+    title="My Favorite Song",
+    artist="Great Artist"
+)
+
+# 動画検索
+results = video_system.search_video("query_video.mp4")
+for result in results:
+    print(f"マッチ: {result['song']['title']} (信頼度: {result['confidence']:.3f})")
+
+# 統計表示
+stats = video_system.get_processing_stats()
+print(f"処理統計: {stats}")
+```
+
+## 📁 バッチ動画処理
+
+### ディレクトリ一括処理
+
+```python
+import glob
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+
+class BatchVideoProcessor:
+    """バッチ動画処理システム"""
+    
+    def __init__(self, database_config, max_workers: int = 4):
+        self.video_system = VideoFingerprintSystem(database_config)
+        self.max_workers = max_workers
+        
+        # 処理統計
+        self.batch_stats = {
+            'total_files': 0,
+            'processed_files': 0,
+            'skipped_files': 0,
+            'error_files': 0,
+            'processing_time': 0
+        }
+    
+    def process_directory(self, video_dir: str, recursive: bool = True,
+                         file_patterns: list = None) -> dict:
+        """ディレクトリ内の動画ファイルを一括処理"""
+        
+        if file_patterns is None:
+            file_patterns = ['*.mp4', '*.avi', '*.mov', '*.mkv', '*.wmv']
+        
+        # 動画ファイル一覧取得
+        video_files = []
+        for pattern in file_patterns:
+            if recursive:
+                search_pattern = os.path.join(video_dir, '**', pattern)
+                video_files.extend(glob.glob(search_pattern, recursive=True))
+            else:
+                search_pattern = os.path.join(video_dir, pattern)
+                video_files.extend(glob.glob(search_pattern))
+        
+        self.batch_stats['total_files'] = len(video_files)
+        print(f"処理対象動画ファイル数: {len(video_files)}")
+        
+        # 並列処理実行
+        import time
+        start_time = time.time()
+        
+        self._process_files_parallel(video_files)
+        
+        self.batch_stats['processing_time'] = time.time() - start_time
+        
+        # 結果サマリー
+        print(f"\n=== バッチ処理完了 ===")
+        print(f"総ファイル数: {self.batch_stats['total_files']}")
+        print(f"処理成功: {self.batch_stats['processed_files']}")
+        print(f"スキップ: {self.batch_stats['skipped_files']}")
+        print(f"エラー: {self.batch_stats['error_files']}")
+        print(f"処理時間: {self.batch_stats['processing_time']:.2f}秒")
+        
+        return self.batch_stats
+    
+    def _process_files_parallel(self, video_files: list):
+        """ファイルの並列処理"""
+        
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            # タスク投入
+            future_to_file = {
+                executor.submit(self._process_single_file, file_path): file_path
+                for file_path in video_files
+            }
+            
+            # 結果収集
+            for future in as_completed(future_to_file):
+                file_path = future_to_file[future]
+                try:
+                    result = future.result()
+                    if result['success']:
+                        self.batch_stats['processed_files'] += 1
+                    else:
+                        self.batch_stats['skipped_files'] += 1
+                    
+                    # 進捗表示
+                    completed = (self.batch_stats['processed_files'] + 
+                               self.batch_stats['skipped_files'] + 
+                               self.batch_stats['error_files'])
+                    
+                    print(f"進捗: {completed}/{self.batch_stats['total_files']} "
+                          f"({completed/self.batch_stats['total_files']*100:.1f}%)")
+                    
+                except Exception as e:
+                    self.batch_stats['error_files'] += 1
+                    print(f"処理エラー {file_path}: {e}")
+    
+    def _process_single_file(self, file_path: str) -> dict:
+        """単一ファイルの処理"""
+        
+        try:
+            # ファイル名からメタデータを推測
+            file_name = Path(file_path).stem
+            title, artist = self._extract_metadata_from_filename(file_name)
+            
+            # 動画処理実行
+            song_id = self.video_system.process_video_file(
+                video_path=file_path,
+                title=title,
+                artist=artist
+            )
+            
+            return {
+                'success': True,
+                'song_id': song_id,
+                'file_path': file_path
+            }
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'error': str(e),
+                'file_path': file_path
+            }
+    
+    def _extract_metadata_from_filename(self, filename: str) -> tuple:
+        """ファイル名からメタデータを抽出"""
+        
+        # 一般的な区切り文字で分割を試行
+        separators = [' - ', '_-_', ' by ', '_by_', ' feat ', '_feat_']
+        
+        for sep in separators:
+            if sep in filename:
+                parts = filename.split(sep, 1)
+                if len(parts) == 2:
+                    return parts[1].strip(), parts[0].strip()  # title, artist
+        
+        # 区切り文字が見つからない場合
+        return filename, "Unknown Artist"
+
+# 使用例
+batch_processor = BatchVideoProcessor(
+    database_config={'file_path': 'batch_video_music.db'},
+    max_workers=6
+)
+
+# ディレクトリ一括処理
+results = batch_processor.process_directory(
+    video_dir="/path/to/video/library",
+    recursive=True,
+    file_patterns=['*.mp4', '*.avi', '*.mov']
+)
+```
+
+## 🔍 動画検索システム
+
+### 高度な動画検索
+
+```python
+class AdvancedVideoSearch:
+    """高度な動画検索システム"""
+    
+    def __init__(self, database_config):
+        self.video_system = VideoFingerprintSystem(database_config)
+        self.search_cache = {}
+    
+    def search_with_time_range(self, query_video_path: str, 
+                              start_time: float = 0, 
+                              duration: float = None,
+                              min_confidence: float = 0.3) -> list:
+        """時間範囲指定での動画検索"""
+        
+        try:
+            # 動画情報取得
+            video_info = self.video_system.processor.get_video_info(query_video_path)
+            total_duration = video_info.get('duration', 0)
+            
+            if duration is None:
+                duration = total_duration - start_time
+            
+            # 指定範囲の音声抽出
+            temp_audio_path = self._extract_audio_segment(
+                query_video_path, start_time, duration
+            )
+            
+            # 音声検索実行
+            results = self.video_system.mimizam.search_song(
+                query_path=temp_audio_path,
+                min_confidence=min_confidence
+            )
+            
+            # 結果に時間情報を追加
+            enhanced_results = []
+            for result in results:
+                enhanced_result = result.copy()
+                enhanced_result['query_time_range'] = {
+                    'start': start_time,
+                    'duration': duration,
+                    'end': start_time + duration
+                }
+                enhanced_results.append(enhanced_result)
+            
+            # 一時ファイルクリーンアップ
+            if os.path.exists(temp_audio_path):
+                os.remove(temp_audio_path)
+            
+            return enhanced_results
+            
+        except Exception as e:
+            print(f"時間範囲検索エラー: {e}")
+            return []
+    
+    def _extract_audio_segment(self, video_path: str, start_time: float, 
+                              duration: float) -> str:
+        """動画の指定範囲から音声を抽出"""
+        
+        output_path = os.path.join(
+            self.video_system.temp_dir,
+            f"segment_{int(start_time)}_{int(duration)}.wav"
+        )
+        
+        cmd = [
+            'ffmpeg',
+            '-i', video_path,
+            '-ss', str(start_time),      # 開始時間
+            '-t', str(duration),         # 継続時間
+            '-vn',                       # 動画ストリーム無視
+            '-acodec', 'pcm_s16le',      # 音声コーデック
+            '-ar', '22050',              # サンプルレート
+            '-ac', '1',                  # モノラル
+            '-y',                        # 上書き許可
+            output_path
+        ]
+        
+        import subprocess
+        subprocess.run(cmd, capture_output=True, check=True)
+        
+        return output_path
+    
+    def multi_segment_search(self, query_video_path: str, 
+                           segment_duration: float = 30,
+                           overlap: float = 10,
+                           min_confidence: float = 0.3) -> list:
+        """複数セグメントでの検索"""
+        
+        # 動画情報取得
+        video_info = self.video_system.processor.get_video_info(query_video_path)
+        total_duration = video_info.get('duration', 0)
+        
+        # セグメント分割
+        segments = []
+        current_time = 0
+        
+        while current_time < total_duration:
+            segment_end = min(current_time + segment_duration, total_duration)
+            segments.append({
+                'start': current_time,
+                'duration': segment_end - current_time
+            })
+            current_time += segment_duration - overlap
+        
+        print(f"セグメント数: {len(segments)}")
+        
+        # 各セグメントで検索実行
+        all_results = []
+        for i, segment in enumerate(segments):
+            print(f"セグメント {i+1}/{len(segments)} 検索中...")
+            
+            segment_results = self.search_with_time_range(
+                query_video_path,
+                segment['start'],
+                segment['duration'],
+                min_confidence
+            )
+            
+            # セグメント情報を追加
+            for result in segment_results:
+                result['segment_index'] = i
+                result['segment_info'] = segment
+            
+            all_results.extend(segment_results)
+        
+        # 結果の統合と重複除去
+        consolidated_results = self._consolidate_results(all_results)
+        
+        return consolidated_results
+    
+    def _consolidate_results(self, results: list) -> list:
+        """検索結果の統合"""
+        
+        # 楽曲IDでグループ化
+        grouped_results = {}
+        for result in results:
+            song_id = result['song']['id']
+            if song_id not in grouped_results:
+                grouped_results[song_id] = []
+            grouped_results[song_id].append(result)
+        
+        # 各楽曲の最高信頼度結果を選択
+        consolidated = []
+        for song_id, song_results in grouped_results.items():
+            best_result = max(song_results, key=lambda x: x['confidence'])
+            
+            # セグメント情報をまとめる
+            segments = [r['segment_info'] for r in song_results]
+            best_result['matched_segments'] = segments
+            best_result['segment_count'] = len(segments)
+            
+            consolidated.append(best_result)
+        
+        # 信頼度でソート
+        consolidated.sort(key=lambda x: x['confidence'], reverse=True)
+        
+        return consolidated
+
+# 使用例
+advanced_search = AdvancedVideoSearch(
+    database_config={'file_path': 'video_search.db'}
+)
+
+# 時間範囲指定検索
+results = advanced_search.search_with_time_range(
+    "query_video.mp4",
+    start_time=30,    # 30秒から
+    duration=60,      # 60秒間
+    min_confidence=0.4
+)
+
+# 複数セグメント検索
+multi_results = advanced_search.multi_segment_search(
+    "long_video.mp4",
+    segment_duration=45,  # 45秒セグメント
+    overlap=15,           # 15秒オーバーラップ
+    min_confidence=0.3
+)
+
+for result in multi_results:
+    song = result['song']
+    print(f"マッチ: {song['title']} by {song['artist']}")
+    print(f"信頼度: {result['confidence']:.3f}")
+    print(f"マッチセグメント数: {result['segment_count']}")
+```
+
+## 🔗 関連ドキュメント
+
+- [基本的な使用方法](./03_basic_usage.md) - 基本操作
+- [高度な使用例](./17_advanced_examples.md) - 応用技術
+- [バッチ処理](./17_advanced_examples.md#バッチ処理とパイプライン) - 大量処理
+- [パフォーマンス最適化](./12_performance_optimization.md) - 性能向上
+- [データベース設定](./10_database_setup.md) - データベース構成
+
+## 💡 動画処理のベストプラクティス
+
+### 1. FFmpeg設定
+- 適切な音声品質設定
+- 効率的なコーデック選択
+- エラーハンドリングの実装
+
+### 2. 一時ファイル管理
+- 適切なクリーンアップ
+- ディスク容量の監視
+- 並列処理時の競合回避
+
+### 3. メタデータ活用
+- 動画情報の保存
+- 検索結果の充実
+- トレーサビリティの確保
+
+動画処理機能により、mimizamシステムは音声だけでなく動画コンテンツの識別も可能になり、より幅広い用途に対応できます。
