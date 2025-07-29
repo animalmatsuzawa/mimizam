@@ -376,107 +376,11 @@ final_config = merge_configs(DEFAULT_CONFIG, PROFILE_CONFIGS['balanced'], USER_C
 
 ### メモリ管理
 
-```python
-from mimizam import AudioFingerprinter
-import librosa
-import numpy as np
+mimizamは大容量音声ファイルの処理において、メモリ効率を重視した設計となっています：
 
-def process_large_audio_file(file_path: str, chunk_duration: int = 30):
-    """大きな音声ファイルをチャンク単位で処理"""
-    
-    fingerprinter = AudioFingerprinter()
-    
-    # 音声ファイルの情報を取得
-    duration = librosa.get_duration(filename=file_path)
-    sr = 22050
-    
-    all_fingerprints = []
-    
-    # チャンク単位で処理
-    for start_time in range(0, int(duration), chunk_duration):
-        end_time = min(start_time + chunk_duration, duration)
-        
-        # チャンクを読み込み
-        audio_chunk, _ = librosa.load(
-            file_path, 
-            sr=sr, 
-            offset=start_time, 
-            duration=chunk_duration
-        )
-        
-        # フィンガープリント生成
-        chunk_fingerprints = fingerprinter.fingerprint_audio(audio_chunk)
-        
-        # 時間オフセットを調整
-        for fp in chunk_fingerprints:
-            fp.time_offset += start_time
-        
-        all_fingerprints.extend(chunk_fingerprints)
-        
-        print(f"処理完了: {start_time}-{end_time}秒 ({len(chunk_fingerprints)}個のフィンガープリント)")
-    
-    return all_fingerprints
-```
-
-### 🔍 `process_large_audio_file`関数の技術的考察
-
-この関数は大きな音声ファイルをチャンク単位で処理する実用的なアプローチを提供していますが、いくつかの技術的な制約があります：
-
-**⚠️ 主な制約事項:**
-
-1. **チャンク境界での情報損失**
-   - チャンク境界をまたぐピークや特徴が検出されない可能性
-   - 音声の連続性が考慮されていない
-
-2. **時間オフセットの単純化**
-   - `fp.time_offset += start_time`は処理遅延を考慮していない
-   - フレーム単位での正確な時間同期が必要
-
-3. **メモリ効率の課題**
-   - 全フィンガープリントをメモリに蓄積
-   - 大容量ファイルでのメモリ不足リスク
-
-**🔧 改善案:**
-
-```python
-def process_large_audio_file_improved(file_path: str, chunk_duration: int = 30, overlap: int = 2):
-    """改善版: オーバーラップ付きチャンク処理"""
-    
-    fingerprinter = AudioFingerprinter()
-    duration = librosa.get_duration(filename=file_path)
-    sr = 22050
-    
-    all_fingerprints = []
-    
-    for start_time in range(0, int(duration), chunk_duration - overlap):
-        end_time = min(start_time + chunk_duration, duration)
-        
-        try:
-            # オーバーラップ付きチャンク読み込み
-            audio_chunk, _ = librosa.load(
-                file_path, 
-                sr=sr, 
-                offset=max(0, start_time - overlap), 
-                duration=chunk_duration + overlap
-            )
-            
-            chunk_fingerprints = fingerprinter.fingerprint_audio(audio_chunk)
-            
-            # 重複除去とオフセット調整
-            for fp in chunk_fingerprints:
-                adjusted_time = fp.time_offset + start_time
-                if start_time <= adjusted_time < end_time:  # 重複除去
-                    fp.time_offset = adjusted_time
-                    all_fingerprints.append(fp)
-                    
-        except Exception as e:
-            print(f"チャンク処理エラー {start_time}-{end_time}秒: {e}")
-            continue
-    
-    return all_fingerprints
-```
-
-この改善版では、チャンク間のオーバーラップと重複除去により、より正確な音声指紋生成が可能になります。
+- **ストリーミング処理**: 音声ファイル全体をメモリに読み込まず、必要な部分のみを処理
+- **指紋の段階的生成**: スペクトログラム→ピーク検出→ハッシュ生成の各段階で中間データを適切に解放
+- **データベース書き込み最適化**: バッチ処理により、I/O操作を最小化
 
 ### バッチ処理
 
