@@ -204,9 +204,50 @@ class SpectrogramAnalyzer:
         
         return mask, min_amplitude
 
+    # 局所最大値検出のオリジナル（未使用）
+    def _original_find_local_maxima(self, magnitude: np.ndarray, mask: np.ndarray, 
+                          frequencies: np.ndarray, times: np.ndarray,
+                          peak_neighborhood_size: int, debug: bool) -> List[Peak]:
+        """スペクトログラム内の局所最大値を検出"""
+        logger = logging.getLogger(__name__)
+        
+        peaks = []
+        search_range_t = range(peak_neighborhood_size, magnitude.shape[1] - peak_neighborhood_size)
+        search_range_f = range(peak_neighborhood_size, magnitude.shape[0] - peak_neighborhood_size)
+        
+        candidates_found = 0
+        
+        for t_idx in search_range_t:
+            for f_idx in search_range_f:
+                if not mask[f_idx, t_idx]:
+                    continue
+                
+                candidates_found += 1
+                
+                # この点が局所最大値かどうかをチェック
+                neighborhood = magnitude[
+                    f_idx - peak_neighborhood_size:f_idx + peak_neighborhood_size + 1,
+                    t_idx - peak_neighborhood_size:t_idx + peak_neighborhood_size + 1
+                ]
+                
+                if magnitude[f_idx, t_idx] == np.max(neighborhood):
+                    peak = Peak(
+                        time=float(times[t_idx]),
+                        frequency=float(frequencies[f_idx]),
+                        amplitude=float(magnitude[f_idx, t_idx])
+                    )
+                    peaks.append(peak)
+        
+        if debug:
+            logger.info(f"Candidate points: {candidates_found}")
+            logger.info(f"Detected peaks: {len(peaks)}")
+            if len(peaks) > 0:
+                amplitudes = [p.amplitude for p in peaks]
+                logger.info(f"Peak amplitude range: {np.min(amplitudes):.2f} to {np.max(amplitudes):.2f} dB")
+        
+        return peaks
 
-
-    def _find_local_maxima(self, magnitude: np.ndarray, mask: np.ndarray, 
+    def _find_local_maxima(self, magnitude: np.ndarray, mask: np.ndarray,
                           frequencies: np.ndarray, times: np.ndarray,
                           peak_neighborhood_size: int, debug: bool) -> List[Peak]:
         """
@@ -432,6 +473,64 @@ class HashGenerator:
         
         return fingerprints
 
+    def _generate_hashes_from_peaks_numpy(self, sorted_peaks: List[Peak], debug: bool, logger) -> List[Fingerprint]:
+        """
+            NumPyベクトル化によるハッシュ生成
+                -ベンチの結果速度改善に優位がなかった為、採用しないけどとりあえず残しておく
+        """
+        fingerprints = []
+        seen_hashes = set()
+        anchor_count = 0
+        pairs_checked = 0
+        valid_time_deltas = []
+
+        # NumPy配列化
+        times = np.array([p.time for p in sorted_peaks])
+        freqs = np.array([p.frequency for p in sorted_peaks])
+        amps = np.array([p.amplitude for p in sorted_peaks])
+        N = len(sorted_peaks)
+
+        for i in range(N):
+            anchor_time = times[i]
+            anchor_freq = freqs[i]
+            anchor_amp = amps[i]
+            # ターゲット候補のインデックス
+            idx_start = i + 1
+            idx_end = min(i + 1 + self.target_zone_size, N)
+            if idx_start >= N:
+                continue
+            candidate_idx = np.arange(idx_start, idx_end)
+            time_deltas = times[candidate_idx] - anchor_time
+            valid_mask = (self.time_delta_range[0] <= time_deltas) & (time_deltas <= self.time_delta_range[1])
+            valid_idx = candidate_idx[valid_mask]
+            if len(valid_idx) > 0:
+                anchor_count += 1
+            for j in valid_idx:
+                target_time = times[j]
+                target_freq = freqs[j]
+                time_delta = target_time - anchor_time
+                valid_time_deltas.append(time_delta)
+                # ハッシュ生成（元のロジックと同じ）
+                f1_quantized = int(anchor_freq // 30) * 30
+                f2_quantized = int(target_freq // 30) * 30
+                if time_delta > 0:
+                    time_delta_q = int(time_delta * 20) * 5
+                else:
+                    time_delta_q = 0
+                primary_hash_input = f"{f1_quantized}|{f2_quantized}|{time_delta_q}"
+                hash_object = hashlib.sha256(primary_hash_input.encode())
+                hash_value = hash_object.hexdigest()
+                if hash_value not in seen_hashes:
+                    seen_hashes.add(hash_value)
+                    fingerprint = Fingerprint(
+                        hash_value=hash_value,
+                        time_offset=anchor_time
+                    )
+                    fingerprints.append(fingerprint)
+                pairs_checked += 1
+        if debug:
+            self._log_generation_summary(pairs_checked, anchor_count, N, valid_time_deltas, len(fingerprints), logger)
+        return fingerprints
     
     def _debug_anchor_info(self, i: int, anchor_peak: Peak, sorted_peaks: List[Peak], logger) -> None:
         """アンカー情報をデバッグ出力"""
