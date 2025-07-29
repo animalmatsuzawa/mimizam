@@ -1,15 +1,15 @@
 # データベース設定ガイド
 
-mimizamは複数のデータベースバックエンドを統一インターフェースでサポートしています。用途と規模に応じて最適なデータベースを選択できます。
+mimizamは複数のデータベースバックエンドを統一インターフェースでサポートしています。各データベースの技術的特徴を理解して、アプリケーション要件に応じて選択してください。
 
 ## 🗄️ サポートされているデータベース
 
-| データベース | 特徴 | 推奨用途 | セットアップ難易度 |
+| データベース | 特徴 | 技術的特性 | セットアップ難易度 |
 |-------------|------|----------|-------------------|
-| **SQLite** | 軽量、ファイルベース | 開発・小規模（1万曲未満） | ⭐ 簡単 |
-| **MySQL** | 高性能、スケーラブル | 本番環境（10万曲程度） | ⭐⭐ 中程度 |
-| **PostgreSQL** | 堅牢、機能豊富 | 複雑なクエリ、高性能 | ⭐⭐ 中程度 |
-| **Elasticsearch** | 全文検索、分散処理 | 大規模検索（100万曲以上） | ⭐⭐⭐ 複雑 |
+| **SQLite** | 軽量、ファイルベース | 単一ファイル、組み込み型 | ⭐ 簡単 |
+| **MySQL** | 高性能、スケーラブル | リレーショナル、ACID準拠 | ⭐⭐ 中程度 |
+| **PostgreSQL** | 堅牢、機能豊富 | 高度なSQL機能、拡張性 | ⭐⭐ 中程度 |
+| **Elasticsearch** | 全文検索、分散処理 | NoSQL、水平スケーリング | ⭐⭐⭐ 複雑 |
 
 ## 🚀 統合APIによる簡単な使用方法
 
@@ -25,26 +25,26 @@ from mimizam import (
     create_mimizam_elasticsearch
 )
 
-# SQLite（最も簡単）
+# SQLite
 with create_mimizam_sqlite("my_music.db") as mimizam:
     song_id = mimizam.add_song("song.wav", "Song Title", "Artist")
     results = mimizam.search_song("query.wav")
 
-# MySQL（拡張性）
+# MySQL
 with create_mimizam_mysql(
     host="localhost", database="music_db",
     username="user", password="pass"
 ) as mimizam:
     # 同じAPIでデータベースを透過的に使用
 
-# PostgreSQL（高性能）
+# PostgreSQL
 with create_mimizam_postgresql(
     host="localhost", database="music_db", 
     username="user", password="pass"
 ) as mimizam:
     # 同じAPIでデータベースを透過的に使用
 
-# Elasticsearch（分散検索）
+# Elasticsearch
 with create_mimizam_elasticsearch(
     host="localhost", index_name="music_index"
 ) as mimizam:
@@ -304,19 +304,19 @@ pip install elasticsearch
 
 ## 📊 パフォーマンス比較
 
-| データベース | 読み取り性能 | 書き込み性能 | セットアップ | メモリ使用量 | 推奨用途 |
+| データベース | 読み取り性能 | 書き込み性能 | セットアップ | メモリ使用量 | 技術的特性 |
 |-------------|-------------|-------------|-------------|-------------|----------|
-| SQLite | 中 | 中 | 簡単 | 低 | 開発・小規模 |
-| MySQL | 高 | 高 | 中 | 中 | 本番環境 |
-| PostgreSQL | 高 | 高 | 中 | 中 | 複雑なクエリ |
-| Elasticsearch | 最高 | 中 | 複雑 | 高 | 大規模検索 |
+| SQLite | 中 | 中 | 簡単 | 低 | 単一プロセス |
+| MySQL | 高 | 高 | 中 | 中 | マルチユーザー |
+| PostgreSQL | 高 | 高 | 中 | 中 | 高機能SQL |
+| Elasticsearch | 最高 | 中 | 複雑 | 高 | 分散アーキテクチャ |
 
-## 🏗️ 環境別設定例
+## 🏗️ 技術設定例
 
-### 開発環境
+### SQLite設定例
 
 ```python
-# SQLiteを使用（最も簡単）
+# ファイルベースデータベース
 with create_mimizam_sqlite("development.db") as mimizam:
     # 楽曲追加
     song_id = mimizam.add_song("test_song.wav", "Test Song", "Test Artist")
@@ -324,55 +324,55 @@ with create_mimizam_sqlite("development.db") as mimizam:
     results = mimizam.search_song("query.wav")
 ```
 
-### 本番環境
+### MySQL設定例
 
 ```python
 import os
 
-# MySQL使用例
+# MySQL接続設定
 with create_mimizam_mysql(
     host="db.example.com",
     port=3306,
-    database="fingerprints_production",
+    database="fingerprints_db",
     username="app_user",
     password=os.getenv("DB_PASSWORD")  # 環境変数から取得
 ) as mimizam:
-    # 同じAPIで本番データベースを使用
+    # 同じAPIでデータベースを使用
     song_id = mimizam.add_song("song.wav", "Song Title", "Artist")
     results = mimizam.search_song("query.wav")
 ```
 
-### 高性能検索環境
+### PostgreSQL設定例
 
 ```python
-# PostgreSQL使用例（高性能）
+# PostgreSQL接続設定
 with create_mimizam_postgresql(
     host="postgresql.example.com",
     port=5432,
-    database="fingerprints_production", 
+    database="fingerprints_db", 
     username="app_user",
     password=os.getenv("DB_PASSWORD")
 ) as mimizam:
-    # 高性能データベースで同じAPI
+    # 同じAPIでデータベースを使用
     song_id = mimizam.add_song("song.wav", "Song Title", "Artist")
     results = mimizam.search_song("query.wav")
 ```
 
-### 大規模分散環境
+### Elasticsearch設定例
 
 ```python
-# Elasticsearch使用例（大規模分散検索）
+# Elasticsearch接続設定
 with create_mimizam_elasticsearch(
     host="elasticsearch.example.com",
     port=9200,
-    index_name="audio_fingerprints_prod",
-    # 大規模環境設定
+    index_name="audio_fingerprints",
+    # シャード・レプリカ設定
     es_songs_shards=3,
     es_songs_replicas=1,
     es_fingerprints_shards=5,
     es_fingerprints_replicas=1
 ) as mimizam:
-    # 分散検索で同じAPI
+    # 同じAPIでデータベースを使用
     song_id = mimizam.add_song("song.wav", "Song Title", "Artist") 
     results = mimizam.search_song("query.wav")
 ```
@@ -434,9 +434,9 @@ with create_mimizam_elasticsearch(
 
 #### Elasticsearch
 - 適切なシャード数とレプリカ数を設定
-- **開発環境**: `es_songs_shards=1, es_songs_replicas=0, es_fingerprints_shards=2, es_fingerprints_replicas=0`
-- **本番環境**: `es_songs_shards=2-3, es_songs_replicas=1, es_fingerprints_shards=3-5, es_fingerprints_replicas=1`
-- **大規模環境**: `es_songs_shards=3-5, es_songs_replicas=1-2, es_fingerprints_shards=5-10, es_fingerprints_replicas=1-2`
+- **小規模構成**: `es_songs_shards=1, es_songs_replicas=0, es_fingerprints_shards=2, es_fingerprints_replicas=0`
+- **中規模構成**: `es_songs_shards=2-3, es_songs_replicas=1, es_fingerprints_shards=3-5, es_fingerprints_replicas=1`
+- **大規模構成**: `es_songs_shards=3-5, es_songs_replicas=1-2, es_fingerprints_shards=5-10, es_fingerprints_replicas=1-2`
 
 #### SQLite
 - WALモードを有効にする（`PRAGMA journal_mode=WAL`）
