@@ -129,35 +129,29 @@ print(f"カスタム検出器によるピーク数: {len(custom_peaks)}")
 from mimizam.database_base import Fingerprint
 import hashlib
 
-class AdvancedHashGenerator:
-    """高度なハッシュ生成器"""
+def generate_robust_hashes(peaks: List[Peak], target_zone_size: int = 5, 
+                          freq_tolerance: int = 50) -> List[Fingerprint]:
+    """ロバストなハッシュ生成"""
+    from mimizam import HashGenerator
+    import hashlib
     
-    def __init__(self, target_zone_size=5, freq_tolerance=50):
-        self.target_zone_size = target_zone_size
-        self.freq_tolerance = freq_tolerance
+    # 実際のHashGeneratorを使用
+    hash_generator = HashGenerator()
+    fingerprints = hash_generator.generate_fingerprints(peaks)
     
-    def generate_robust_hashes(self, peaks: List[Peak]) -> List[Fingerprint]:
-        """ロバストなハッシュ生成"""
-        fingerprints = []
+    # 追加のロバスト性向上処理
+    robust_fingerprints = []
+    sorted_peaks = sorted(peaks, key=lambda p: p.time)
+    
+    for i, anchor in enumerate(sorted_peaks):
+        # ターゲットゾーン内のピークを検索
+        targets = find_target_peaks_in_zone(anchor, sorted_peaks[i+1:], target_zone_size)
         
-        # ピークを時間順にソート
-        sorted_peaks = sorted(peaks, key=lambda p: p.time)
-        
-        for i, anchor in enumerate(sorted_peaks):
-            # ターゲットゾーン内のピークを検索
-            targets = self._find_target_peaks(anchor, sorted_peaks[i+1:])
-            
-            for target in targets:
-                # 複数のハッシュ方式を生成
-                hash_variants = [
-                    self._generate_frequency_hash(anchor, target),
-                    self._generate_time_delta_hash(anchor, target),
-                    self._generate_amplitude_hash(anchor, target)
-                ]
-                
-                for hash_value in hash_variants:
-                    if hash_value:  # 有効なハッシュのみ追加
-                        fingerprint = Fingerprint(
+        for target in targets:
+            # 基本的なハッシュ生成
+            hash_value = generate_frequency_hash(anchor, target)
+            if hash_value:
+                fingerprint = Fingerprint(
                             hash_value=hash_value,
                             time_offset=anchor.time
                         )
@@ -271,100 +265,98 @@ if db.connect():
 from collections import defaultdict
 from typing import Dict, List, Tuple
 
-class CustomMatcher:
-    """カスタムマッチングアルゴリズム"""
+def find_custom_matches(db: FingerprintDatabase, 
+                       query_fingerprints: List[Fingerprint],
+                       min_matches: int = 5, time_tolerance: float = 2.0) -> List[Dict]:
+    """カスタムマッチング実行"""
+    from mimizam import FingerprintMatcher
+    import numpy as np
     
-    def __init__(self, min_matches=5, time_tolerance=2.0):
-        self.min_matches = min_matches
-        self.time_tolerance = time_tolerance
+    # 実際のFingerprintMatcherを使用
+    matcher = FingerprintMatcher()
+    raw_matches = db.search_fingerprints(query_fingerprints)
     
-    def find_matches(self, db: FingerprintDatabase, 
-                    query_fingerprints: List[Fingerprint]) -> List[Dict]:
-        """カスタムマッチング実行"""
+    # 各楽曲の時間オフセット分析
+    song_matches = {}
+    for song_id, matches in raw_matches.items():
+        time_diffs = [db_time - query_time for query_time, db_time in matches]
         
-        # データベースから候補を検索
-        raw_matches = db.search_fingerprints(query_fingerprints)
+        # 時間差のクラスタリング
+        clusters = cluster_time_differences(time_diffs, min_matches, time_tolerance)
         
-        # 各楽曲の時間オフセット分析
-        song_matches = {}
-        for song_id, matches in raw_matches.items():
-            time_diffs = [db_time - query_time for query_time, db_time in matches]
-            
-            # 時間差のクラスタリング
-            clusters = self._cluster_time_differences(time_diffs)
-            
-            # 最大クラスターを選択
-            if clusters:
-                best_cluster = max(clusters, key=len)
-                if len(best_cluster) >= self.min_matches:
-                    song_matches[song_id] = {
-                        'matches': len(best_cluster),
-                        'time_offset': np.median(best_cluster),
-                        'confidence': self._calculate_confidence(best_cluster, matches)
-                    }
-        
-        # 結果をソート
-        results = []
-        for song_id, match_info in song_matches.items():
-            song = db.get_song(song_id)
-            if song:
-                results.append({
-                    'song': song,
-                    'matches': match_info['matches'],
-                    'time_offset': match_info['time_offset'],
-                    'confidence': match_info['confidence']
-                })
-        
-        return sorted(results, key=lambda x: x['confidence'], reverse=True)
+        # 最大クラスターを選択
+        if clusters:
+            best_cluster = max(clusters, key=len)
+            if len(best_cluster) >= min_matches:
+                song_matches[song_id] = {
+                    'matches': len(best_cluster),
+                    'time_offset': np.median(best_cluster),
+                    'confidence': calculate_match_confidence(best_cluster, matches)
+                }
     
-    def _cluster_time_differences(self, time_diffs: List[float]) -> List[List[float]]:
-        """時間差のクラスタリング"""
-        if not time_diffs:
-            return []
-        
-        clusters = []
-        sorted_diffs = sorted(time_diffs)
-        
-        current_cluster = [sorted_diffs[0]]
-        
-        for diff in sorted_diffs[1:]:
-            if abs(diff - current_cluster[-1]) <= self.time_tolerance:
-                current_cluster.append(diff)
-            else:
-                if len(current_cluster) >= self.min_matches:
-                    clusters.append(current_cluster)
-                current_cluster = [diff]
-        
-        if len(current_cluster) >= self.min_matches:
-            clusters.append(current_cluster)
-        
-        return clusters
+    # 結果をソート
+    results = []
+    for song_id, match_info in song_matches.items():
+        song = db.get_song(song_id)
+        if song:
+            results.append({
+                'song': song,
+                'matches': match_info['matches'],
+                'time_offset': match_info['time_offset'],
+                'confidence': match_info['confidence']
+            })
     
-    def _calculate_confidence(self, cluster: List[float], all_matches: List[Tuple]) -> float:
-        """信頼度計算"""
-        cluster_size = len(cluster)
-        total_matches = len(all_matches)
-        
-        # クラスター内の一貫性
-        consistency = 1.0 - (np.std(cluster) / (np.mean(cluster) + 1e-10))
-        
-        # マッチ率
-        match_ratio = cluster_size / max(total_matches, 1)
-        
-        # 総合信頼度
-        confidence = (consistency * 0.6 + match_ratio * 0.4) * min(cluster_size / 10, 1.0)
-        
-        return max(0.0, min(1.0, confidence))
+    return sorted(results, key=lambda x: x['confidence'], reverse=True)
 
-# カスタムマッチャーの使用
-custom_matcher = CustomMatcher(min_matches=3, time_tolerance=1.5)
+def cluster_time_differences(time_diffs: List[float], min_matches: int, 
+                           time_tolerance: float) -> List[List[float]]:
+    """時間差のクラスタリング"""
+    if not time_diffs:
+        return []
+    
+    clusters = []
+    sorted_diffs = sorted(time_diffs)
+    
+    current_cluster = [sorted_diffs[0]]
+    
+    for diff in sorted_diffs[1:]:
+        if abs(diff - current_cluster[-1]) <= time_tolerance:
+            current_cluster.append(diff)
+        else:
+            if len(current_cluster) >= min_matches:
+                clusters.append(current_cluster)
+            current_cluster = [diff]
+    
+    if len(current_cluster) >= min_matches:
+        clusters.append(current_cluster)
+    
+    return clusters
+
+def calculate_match_confidence(cluster: List[float], all_matches: List[Tuple]) -> float:
+    """信頼度計算"""
+    import numpy as np
+    
+    cluster_size = len(cluster)
+    total_matches = len(all_matches)
+    
+    # クラスター内の一貫性
+    consistency = 1.0 - (np.std(cluster) / (np.mean(cluster) + 1e-10))
+    
+    # マッチ率
+    match_ratio = cluster_size / max(total_matches, 1)
+    
+    # 総合信頼度
+    confidence = (consistency * 0.6 + match_ratio * 0.4) * min(cluster_size / 10, 1.0)
+    
+    return max(0.0, min(1.0, confidence))
 
 # クエリ音声の処理
-query_audio, _ = librosa.load("query.wav", sr=fingerprinter.spectrogram_analyzer.sr)
+query_audio, _ = librosa.load("query.wav", sr=22050)
+fingerprinter = AudioFingerprinter()
 query_fingerprints = fingerprinter.fingerprint_audio(query_audio)
 
 # カスタムマッチング実行
-matches = custom_matcher.find_matches(db, query_fingerprints)
+matches = find_custom_matches(db, query_fingerprints, min_matches=3, time_tolerance=1.5)
 
 for match in matches:
     song = match['song']
