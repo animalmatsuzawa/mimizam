@@ -376,34 +376,36 @@ final_config = merge_configs(DEFAULT_CONFIG, PROFILE_CONFIGS['balanced'], USER_C
 
 mimizamは音声指紋生成とマッチング処理において、以下の実装された最適化機能を提供します：
 
-### Numba JIT最適化
+### Numba JIT最適化（実験的機能）
 
-ピーク検出処理の高速化：
+**注意: この機能は現在デフォルトで無効化されています**
+
+mimizamにはNumba JIT最適化機能が実装されていますが、ベンチマーク結果で処理速度の優位性が確認できず、ピークオーバーフロー問題が発生するため、現在はデフォルトで無効化されています。
 
 ```python
 from mimizam import AudioFingerprinter
 
-# Numba JIT最適化を有効化
-fingerprinter = AudioFingerprinter(enable_numba_optimization=True)
+# デフォルトでは無効（enable_numba_optimization=False）
+fingerprinter = AudioFingerprinter()
 
-# 初回実行時に自動的にJITコンパイルが実行される
-fingerprints = fingerprinter.fingerprint_file("audio.wav")
+# 実験的に有効化する場合（推奨されません）
+# fingerprinter = AudioFingerprinter(enable_numba_optimization=True)
 ```
 
-**技術詳細:**
-- `_numba_optimized_peak_detection`関数でスペクトログラムピーク検出を高速化
-- 初期化時にダミーデータで事前コンパイルを実行し、実行時遅延を回避
-- `@njit(cache=True)`によるキャッシュ機能でコンパイル結果を再利用
+**技術的制限:**
+- ベンチマークで性能向上が確認されていない
+- ピークオーバーフロー問題により最大ピーク数が制限される
+- `SpectrogramAnalyzer`ではデフォルトで`enable_numba_optimization=False`に設定済み
 
 ### 適応的パラメータ調整
 
-音声特性に基づく動的パラメータ最適化：
+音声特性に基づく動的パラメータ最適化（デフォルトで有効）：
 
 ```python
 from mimizam import AudioFingerprinter
 
-# 適応的パラメータ調整を有効化
-fingerprinter = AudioFingerprinter(enable_adaptive_params=True)
+# 適応的パラメータ調整はデフォルトで有効
+fingerprinter = AudioFingerprinter()
 
 # 音声特性を自動分析してパラメータを最適化
 fingerprints = fingerprinter.fingerprint_file("audio.wav", debug=True)
@@ -417,12 +419,13 @@ fingerprints = fingerprinter.fingerprint_file("audio.wav", debug=True)
 
 ### パフォーマンス監視
 
-処理時間とリソース使用量の監視：
+処理時間とリソース使用量の監視（適応的パラメータ調整と連動）：
 
 ```python
 from mimizam import AudioFingerprinter
 
-fingerprinter = AudioFingerprinter(enable_adaptive_params=True)
+# パフォーマンス監視は適応的パラメータ調整と連動して自動有効化
+fingerprinter = AudioFingerprinter()
 
 # パフォーマンス監視が自動的に有効化される
 fingerprints = fingerprinter.fingerprint_file("audio.wav")
