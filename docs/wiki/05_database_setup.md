@@ -1,6 +1,6 @@
 # データベース設定ガイド
 
-mimizamは複数のデータベースバックエンドを統一インターフェースでサポートしています。各データベースの技術的特徴を理解して、アプリケーション要件に応じて選択してください。
+mimizamは複数のデータベースバックエンドを統一インターフェースでサポートしています。各データベースの技術的特徴を理解して、アプリケーション要件に応じて選択できます。
 
 ## 🗄️ サポートされているデータベース
 
@@ -79,7 +79,7 @@ config = create_sqlite_config("custom_path.db")
 db = FingerprintDatabase(config)
 ```
 
-### SQLite最適化設定
+### SQLite設定
 
 ```python
 # WALモード有効化（パフォーマンス向上）
@@ -140,7 +140,7 @@ config = create_mysql_config(
 db = FingerprintDatabase(config)
 ```
 
-### MySQL最適化設定
+### MySQL設定
 
 ```sql
 -- my.cnf設定例
@@ -198,7 +198,7 @@ config = create_postgresql_config(
 db = FingerprintDatabase(config)
 ```
 
-### PostgreSQL最適化設定
+### PostgreSQL設定
 
 ```sql
 -- postgresql.conf設定例
@@ -273,7 +273,7 @@ config = DatabaseConfig(
 db = FingerprintDatabase(config)
 ```
 
-### 推奨シャード・レプリカ設定
+### シャード・レプリカ設定
 
 #### 楽曲インデックス (songs)
 - **小規模** (1万曲未満): `es_songs_shards=1, es_songs_replicas=0`
@@ -425,7 +425,7 @@ with create_mimizam_elasticsearch(
    pip list | grep elasticsearch
    ```
 
-### パフォーマンス最適化
+### パフォーマンス設定
 
 #### MySQL/PostgreSQL
 - インデックスが正しく作成されているか確認
@@ -441,7 +441,7 @@ with create_mimizam_elasticsearch(
 #### SQLite
 - WALモードを有効にする（`PRAGMA journal_mode=WAL`）
 - キャッシュサイズの調整
-- 同期モードの最適化
+- 同期モードの設定
 
 
 ## 🔗 関連ドキュメント
