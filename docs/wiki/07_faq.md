@@ -198,7 +198,7 @@ def detect_duplicates(mimizam, threshold=0.8):
    duration = len(audio) / 22050
    print(f"音声長: {duration:.2f}秒")
    
-   # 最低3秒以上を推奨
+   # 最低3秒以上
    ```
 
 3. **無音または単調な音声**
@@ -289,13 +289,13 @@ def process_large_dataset_efficiently(file_paths, batch_size=10):
     mimizam.close()
 ```
 
-## 🚀 パフォーマンス最適化
+## 🚀 パフォーマンス設定
 
 ### Q13: 処理速度を向上させるにはどうすればよいですか？
 
-**A:** 以下の最適化手法を試してください：
+**A:** 以下の設定手法を試してください：
 
-**1. Numba最適化の有効化**
+**1. Numba機能の有効化**
 ```python
 fingerprinter = AudioFingerprinter(enable_numba_optimization=True)
 ```
@@ -322,13 +322,13 @@ fast_fingerprinter = AudioFingerprinter(
 
 ### Q14: 大規模データベースでの検索が遅いです
 
-**A:** データベース最適化の方法：
+**A:** データベース設定の方法：
 
-**インデックス最適化:**
+**インデックス設定:**
 ```python
 # SQLiteの場合
 def optimize_sqlite_database(db_path):
-    """SQLiteデータベース最適化"""
+    """SQLiteデータベース設定"""
     
     import sqlite3
     
@@ -350,7 +350,7 @@ def optimize_sqlite_database(db_path):
     conn.close()
 ```
 
-**データベース設定の最適化:**
+**データベース設定:**
 ```python
 # SQLiteの場合、適切なデータベース設定を使用
 mimizam = create_mimizam_sqlite("optimized_music.db")
