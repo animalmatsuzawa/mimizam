@@ -21,14 +21,14 @@
 
 ### 適応パラメータ最適化
 - 音声特性に応じた自動パラメータ調整
-- リアルタイムでの処理最適化
+- リアルタイムでの処理調整
 - ジャンル特性を考慮した調整
 
 ### マルチデータベース対応
-- **SQLite**: 軽量、ファイルベース（開発・小規模用途）
-- **MySQL**: 高性能、スケーラブル（本番環境）
-- **PostgreSQL**: 堅牢、機能豊富（複雑なクエリ）
-- **Elasticsearch**: 全文検索、分散処理（大規模検索）
+- **SQLite**: 軽量、ファイルベース、単一プロセス
+- **MySQL**: リレーショナル、ACID準拠、マルチユーザー
+- **PostgreSQL**: 高度なSQL機能、拡張性
+- **Elasticsearch**: NoSQL、水平スケーリング、分散アーキテクチャ
 
 ### リアルタイム音声識別
 - 短い音声クリップ（5-10秒）から楽曲特定
@@ -82,7 +82,7 @@ python examples/mimizam_demo.py
 ```python
 from mimizam import create_mimizam_sqlite
 
-# SQLiteを使用した簡単なセットアップ
+# SQLiteを使用したセットアップ
 with create_mimizam_sqlite("my_music.db") as mimizam:
     # 楽曲をデータベースに追加
     song_id = mimizam.add_song("path/to/song.wav", "My Song", "Artist Name")
@@ -161,7 +161,7 @@ fingerprinter = AudioFingerprinter(
 fingerprinter = AudioFingerprinter(
     n_fft=1024,           # 高速処理
     hop_length=512,       # 粗い時間解像度
-    enable_adaptive_params=True  # 適応最適化
+    enable_adaptive_params=True  # 適応パラメータ
 )
 ```
 

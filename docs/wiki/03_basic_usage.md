@@ -5,9 +5,9 @@ mimizamの基本的な使用方法を段階的に説明します。初めてmimi
 ## 🎯 学習の流れ
 
 1. **基本操作**: 楽曲の追加と検索
-2. **データベース選択**: 用途に応じたバックエンド選択
+2. **データベース選択**: バックエンド選択
 3. **バッチ処理**: 複数ファイルの効率的な処理
-4. **設定調整**: パフォーマンスの最適化
+4. **設定調整**: パフォーマンスの調整
 5. **トラブルシューティング**: よくある問題の解決
 
 ## 🚀 最初のステップ
@@ -198,7 +198,7 @@ with create_mimizam_sqlite("metadata.db") as mimizam:
 
 ## 🔍 検索オプション
 
-### スコアリング方式の選択
+### スコアリング方式
 
 ```python
 with create_mimizam_sqlite("scoring.db") as mimizam:
@@ -331,7 +331,7 @@ def music_identification_app():
             print("3. 楽曲一覧")
             print("4. 終了")
             
-            choice = input("選択してください (1-4): ")
+            choice = input("番号を入力してください (1-4): ")
             
             if choice == '1':
                 file_path = input("音声ファイルのパス: ")
@@ -369,7 +369,7 @@ def music_identification_app():
                 break
             
             else:
-                print("❌ 無効な選択です")
+                print("❌ 無効な番号です")
 
 # 実行（インタラクティブ環境で）
 # music_identification_app()

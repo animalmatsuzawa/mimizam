@@ -64,7 +64,7 @@ mimizamは4つの主要レイヤーで構成されています：
 - `get_song()`: 楽曲情報を取得
 - `delete_song()`: 楽曲を削除
 
-**ファクトリ関数**により、データベースの種類に応じたインスタンスを簡単に作成できます：
+**ファクトリ関数**により、データベースの種類に応じたインスタンスを作成できます：
 - `create_mimizam_sqlite()`: SQLite用
 - `create_mimizam_mysql()`: MySQL用
 - `create_mimizam_postgresql()`: PostgreSQL用
@@ -93,10 +93,10 @@ mimizamは4つの主要レイヤーで構成されています：
 
 各データベースシステムに特化した実装：
 
-- **SQLiteBackend**: ファイルベース、軽量（開発・小規模用途）
-- **MySQLBackend**: 高性能、スケーラブル（本番環境）
-- **PostgreSQLBackend**: 堅牢、機能豊富（複雑なクエリ）
-- **ElasticsearchBackend**: 全文検索、分散処理（大規模検索）
+- **SQLiteBackend**: ファイルベース、軽量、単一プロセス
+- **MySQLBackend**: リレーショナル、ACID準拠、マルチユーザー
+- **PostgreSQLBackend**: 高度なSQL機能、拡張性
+- **ElasticsearchBackend**: NoSQL、水平スケーリング、分散アーキテクチャ
     config = create_sqlite_config(db_path)
     database = FingerprintDatabase(config)
     fingerprinter = AudioFingerprinter(**kwargs)
@@ -319,7 +319,7 @@ class AdaptiveParameterTuner:
     """適応パラメータ調整"""
     
     def optimize_for_audio(self, audio: np.ndarray) -> dict:
-        """音声特性に応じたパラメータ最適化"""
+        """音声特性に応じたパラメータ調整"""
         # 音声特性分析
         characteristics = self._analyze_audio(audio)
         
@@ -372,15 +372,15 @@ USER_CONFIG = {
 final_config = merge_configs(DEFAULT_CONFIG, PROFILE_CONFIGS['balanced'], USER_CONFIG)
 ```
 
-## 📊 パフォーマンス最適化
+## 📊 パフォーマンス機能
 
-mimizamは音声指紋生成とマッチング処理において、以下の実装された最適化機能を提供します：
+mimizamは音声指紋生成とマッチング処理において、以下の実装された機能を提供します：
 
-### Numba JIT最適化（実験的機能）
+### Numba JIT機能（実験的機能）
 
 **注意: この機能は現在デフォルトで無効化されています**
 
-mimizamにはNumba JIT最適化機能が実装されていますが、ベンチマーク結果で処理速度の優位性が確認できず、ピークオーバーフロー問題が発生するため、現在はデフォルトで無効化されています。
+mimizamにはNumba JIT機能が実装されていますが、ベンチマーク結果で処理速度の優位性が確認できず、ピークオーバーフロー問題が発生するため、現在はデフォルトで無効化されています。
 
 ```python
 from mimizam import AudioFingerprinter
@@ -388,7 +388,7 @@ from mimizam import AudioFingerprinter
 # デフォルトでは無効（enable_numba_optimization=False）
 fingerprinter = AudioFingerprinter()
 
-# 実験的に有効化する場合（推奨されません）
+# 実験的に有効化する場合（現在は無効化されています）
 # fingerprinter = AudioFingerprinter(enable_numba_optimization=True)
 ```
 
@@ -399,7 +399,7 @@ fingerprinter = AudioFingerprinter()
 
 ### 適応的パラメータ調整
 
-音声特性に基づく動的パラメータ最適化（デフォルトで有効）：
+音声特性に基づく動的パラメータ調整（デフォルトで有効）：
 
 ```python
 from mimizam import AudioFingerprinter
@@ -407,15 +407,15 @@ from mimizam import AudioFingerprinter
 # 適応的パラメータ調整はデフォルトで有効
 fingerprinter = AudioFingerprinter()
 
-# 音声特性を自動分析してパラメータを最適化
+# 音声特性を自動分析してパラメータを調整
 fingerprints = fingerprinter.fingerprint_file("audio.wav", debug=True)
 ```
 
-**最適化項目:**
+**調整項目:**
 - 静寂比率に基づく振幅閾値調整
 - スペクトルエントロピーによる複雑度対応
 - テンポ検出による時間パラメータ調整
-- 音声継続時間による処理パラメータ最適化
+- 音声継続時間による処理パラメータ調整
 
 ### パフォーマンス監視
 
@@ -436,9 +436,9 @@ if fingerprinter.performance_monitor:
     print(summary)
 ```
 
-### データベース最適化
+### データベース設定
 
-SQLiteバックエンドでの最適化設定：
+SQLiteバックエンドでの設定：
 
 - **WALモード**: 読み取り時のブロック回避
 - **メモリマップ**: 256MBメモリマップによる高速アクセス
@@ -449,7 +449,7 @@ SQLiteバックエンドでの最適化設定：
 ```python
 from mimizam import create_mimizam_sqlite
 
-# 最適化設定は自動的に適用される
+# 設定は自動的に適用される
 mimizam = create_mimizam_sqlite("optimized.db")
 ```
 
@@ -597,26 +597,3 @@ def create_mimizam_redis(host: str = 'localhost', port: int = 6379,
 - [データベース設定](./05_database_setup.md) - データベース層の詳細
 - [基本的な使用例](./06_basic_examples.md) - 実践的なサンプルコード
 - [FAQ](./07_faq.md) - よくある質問とトラブルシューティング
-
-## 💡 設計原則
-
-### 1. 関心の分離
-- 各レイヤーは明確な責任を持つ
-- コンポーネント間の依存関係を最小化
-- インターフェースを通じた疎結合
-
-### 2. 拡張性
-- プラグインアーキテクチャによる機能拡張
-- 設定システムによるカスタマイズ
-- 新しいバックエンドの容易な追加
-
-### 3. 性能
-- Numba JIT最適化によるピーク検出高速化
-- 適応的パラメータ調整による音声特性対応
-- パフォーマンス監視による処理時間追跡
-- データベース最適化による高速検索
-
-### 4. 保守性
-- 明確なコード構造
-- 包括的なテストスイート
-- 詳細なドキュメント

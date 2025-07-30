@@ -3,9 +3,9 @@
 ## 📋 システム要件
 
 ### Python環境
-- **Python**: 3.9以上（推奨: 3.10以上）
+- **Python**: 3.9以上（3.10以上）
 - **OS**: Windows、macOS、Linux対応
-- **メモリ**: 最低2GB、推奨4GB以上
+- **メモリ**: 最低2GB、4GB以上
 - **ストレージ**: 最低1GB（音声ファイルとデータベース用）
 
 ### 必須依存関係
@@ -32,7 +32,7 @@ git clone https://github.com/animalmatsuzawa/mimizam.git
 cd mimizam
 ```
 
-### 2. 仮想環境の作成（推奨）
+### 2. 仮想環境の作成
 
 ```bash
 # Python仮想環境の作成
@@ -57,7 +57,7 @@ pip install -e .
 
 ## 🗄️ データベース別セットアップ
 
-### SQLite（推奨・最も簡単）
+### SQLite
 
 ```bash
 # SQLiteは標準ライブラリに含まれているため追加インストール不要
@@ -154,7 +154,7 @@ with create_mimizam_postgresql(
 pip install elasticsearch
 
 # Elasticsearchサーバーのインストール（システム別）
-# Docker（推奨）
+# Docker
 docker run -d --name elasticsearch \
   -p 9200:9200 -p 9300:9300 \
   -e "discovery.type=single-node" \
@@ -292,7 +292,7 @@ sudo apt-get install libsndfile1-dev
 brew install libsndfile
 
 # Windows
-# conda使用を推奨
+# conda使用
 conda install librosa
 ```
 
@@ -327,30 +327,30 @@ except Exception as e:
 #### 4. メモリ不足エラー
 
 ```python
-# 大きな音声ファイル処理時のメモリ最適化
+# 大きな音声ファイル処理時のメモリ設定
 fingerprinter = AudioFingerprinter(
     n_fft=1024,        # FFTサイズを小さく
     hop_length=512,    # ホップ長を大きく
-    enable_adaptive_params=True  # 適応最適化
+    enable_adaptive_params=True  # 適応パラメータ
 )
 ```
 
-## 📊 パフォーマンス最適化
+## 📊 パフォーマンス設定
 
-### 1. 依存関係の最適化
+### 1. 依存関係の設定
 
 ```bash
-# Intel MKL最適化（Intel CPU用）
+# Intel MKL（Intel CPU用）
 pip install mkl
 
-# OpenBLAS最適化（AMD CPU用）
+# OpenBLAS（AMD CPU用）
 pip install openblas
 ```
 
-### 2. numba最適化設定
+### 2. numba設定
 
 ```python
-# numba設定の最適化
+# numba設定
 import os
 os.environ['NUMBA_NUM_THREADS'] = '4'  # CPUコア数に応じて調整
 os.environ['NUMBA_CACHE_DIR'] = '/tmp/numba_cache'

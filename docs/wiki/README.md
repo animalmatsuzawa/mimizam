@@ -24,14 +24,14 @@
 - **高精度音声指紋生成**: Shazamアルゴリズムベースの指紋生成
 - **マルチデータベース対応**: SQLite、MySQL、PostgreSQL、Elasticsearch
 - **リアルタイム音声識別**: 短い音声クリップから楽曲を特定
-- **シンプルなAPI**: 初心者でも簡単に使える統合インターフェース
+- **シンプルなAPI**: 初心者でも使える統合インターフェース
 
 ## 🚀 クイックスタート
 
 ```python
 from mimizam import create_mimizam_sqlite
 
-# SQLiteを使用した簡単なセットアップ
+# SQLiteを使用したセットアップ
 with create_mimizam_sqlite("my_music.db") as mimizam:
     # 楽曲をデータベースに追加
     song_id = mimizam.add_song("path/to/song.wav", "My Song", "Artist Name")
