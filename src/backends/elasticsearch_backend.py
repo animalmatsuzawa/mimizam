@@ -22,6 +22,7 @@ from typing import List, Optional, Dict, Tuple
 from datetime import datetime
 import traceback
 from ..database_base import DatabaseBackend, DatabaseConfig, Song, Fingerprint
+from ..exceptions import ConnectionError, QueryError
 
 try:
     from elasticsearch import Elasticsearch
@@ -102,9 +103,7 @@ class ElasticsearchBackend(DatabaseBackend):
                 return False
                 
         except Exception as e:
-            self.logger.error(f"Elasticsearch connection error: {e}")
-            self.logger.error(f"Configuration: host={self.config.host}, port={self.config.port}")
-            self.logger.error(f"Stack trace: {traceback.format_exc()}")
+            self.logger.error(f"Elasticsearch connection error: {e} | Context: {{'host': self.config.host, 'port': self.config.port}}")
             return False
     
     def disconnect(self) -> None:
@@ -147,6 +146,7 @@ class ElasticsearchBackend(DatabaseBackend):
                             }
                         },
                         "file_path": {"type": "keyword"},
+                        "meta": {"type": "object", "enabled": True},
                         "created_at": {"type": "date"}
                     }
                 }
@@ -203,6 +203,7 @@ class ElasticsearchBackend(DatabaseBackend):
                 "title": song.title,
                 "artist": song.artist,
                 "file_path": song.file_path,
+                "meta": song.meta if song.meta else None,
                 "created_at": datetime.now().isoformat()
             }
             
@@ -223,7 +224,7 @@ class ElasticsearchBackend(DatabaseBackend):
                 return False
                 
         except ElasticsearchException as e:
-            self.logger.error(f"Elasticsearch song addition error: {e}")
+            self.logger.error(f"Elasticsearch song addition error: {e} | Context: {{'song_id': song.id}}")
             return False
     
     def add_fingerprints(self, song_id: str, fingerprints: List[Fingerprint]) -> bool:
@@ -269,7 +270,7 @@ class ElasticsearchBackend(DatabaseBackend):
             
             return True
         except Exception as e:
-            self.logger.error(f"Elasticsearch fingerprint addition error: {e}")
+            self.logger.error(f"Elasticsearch fingerprint addition error: {e} | Context: {{'song_id': song_id, 'count': len(fingerprints)}}")
             return False
 
     def search_fingerprints(self, query_fingerprints: List[Fingerprint]) -> Dict[str, List[Tuple[float, float]]]:
@@ -368,11 +369,13 @@ class ElasticsearchBackend(DatabaseBackend):
             
             result = self.client.get(index=self.songs_index, id=song_id)
             source = result['_source']
+            meta = source.get('meta') if 'meta' in source else None
             return Song(
                 id=source['id'],
                 title=source['title'],
                 artist=source['artist'],
                 file_path=source['file_path'],
+                meta=meta,
                 created_at=source.get('created_at')
             )
         except ElasticsearchException as e:
@@ -403,11 +406,13 @@ class ElasticsearchBackend(DatabaseBackend):
             
             for hit in result['hits']['hits']:
                 source = hit['_source']
+                meta = source.get('meta') if 'meta' in source else None
                 songs.append(Song(
                     id=source['id'],
                     title=source['title'],
                     artist=source['artist'],
                     file_path=source['file_path'],
+                    meta=meta,
                     created_at=source.get('created_at')
                 ))
         except ElasticsearchException as e:
@@ -456,7 +461,7 @@ class ElasticsearchBackend(DatabaseBackend):
             
             return True
         except ElasticsearchException as e:
-            self.logger.error(f"Elasticsearch song deletion error: {e}")
+            self.logger.error(f"Elasticsearch song deletion error: {e} | Context: {{'song_id': song_id}}")
             return False
 
     def get_fingerprints_by_song(self, song_id: str) -> List[Fingerprint]:

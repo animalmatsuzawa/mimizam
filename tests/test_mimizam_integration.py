@@ -43,10 +43,29 @@ from mimizam import (
     create_mimizam_postgresql, create_mimizam_elasticsearch
 )
 from mimizam import DatabaseConfig
+import json
 
 
 class TestMimizamSQLite(unittest.TestCase):
     """MimizamのSQLiteバックエンドテスト"""
+
+    def test_add_song_with_meta(self):
+        """meta情報付き楽曲追加・取得テスト"""
+        meta = {"genre": "pop", "year": 2024, "tags": ["test", "integration"]}
+        song_id = self.mimizam.add_song(
+            file_path=self.test_audio_file,
+            title="Meta Song",
+            artist="Meta Artist",
+            song_id="meta_song_1",
+            meta_json=json.dumps(meta)
+        )
+        self.assertIsNotNone(song_id)
+        song = self.mimizam.get_song(song_id)
+        self.assertIsNotNone(song)
+        self.assertIsInstance(song.meta, dict)
+        self.assertEqual(song.meta["genre"], "pop")
+        self.assertEqual(song.meta["year"], 2024)
+        self.assertIn("test", song.meta["tags"])
     
     def setUp(self):
         """各テストの前処理"""

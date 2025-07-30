@@ -2,6 +2,8 @@
 
 from typing import List, Optional, Dict, Tuple
 from ..database_base import DatabaseBackend, DatabaseConfig, Song, Fingerprint
+from ..exceptions import ConnectionError, QueryError
+import json
 
 try:
     import psycopg2
@@ -68,7 +70,7 @@ class PostgreSQLBackend(DatabaseBackend):
             self.logger.info(f"Connected to PostgreSQL database: {self.config.host}:{self.config.port}")
             return True
         except PostgresError as e:
-            self.logger.error(f"PostgreSQL connection error: {e}")
+            self.logger.error(f"PostgreSQL connection error: {e} | Context: {{'host': self.config.host, 'port': self.config.port}}")
             return False
     
     def disconnect(self) -> None:
@@ -89,6 +91,7 @@ class PostgreSQLBackend(DatabaseBackend):
                     title TEXT NOT NULL,
                     artist TEXT NOT NULL,
                     file_path TEXT NOT NULL,
+                    meta TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
@@ -149,17 +152,19 @@ class PostgreSQLBackend(DatabaseBackend):
         """PostgreSQLに楽曲を追加"""
         try:
             cursor = self.connection.cursor()
+            meta_json = json.dumps(song.meta, ensure_ascii=False) if song.meta else None
             cursor.execute("""
-                INSERT INTO songs (id, title, artist, file_path)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO songs (id, title, artist, file_path, meta)
+                VALUES (%s, %s, %s, %s, %s)
                 ON CONFLICT (id) DO UPDATE SET
                 title = EXCLUDED.title,
                 artist = EXCLUDED.artist,
-                file_path = EXCLUDED.file_path
-            """, (song.id, song.title, song.artist, song.file_path))
+                file_path = EXCLUDED.file_path,
+                meta = EXCLUDED.meta
+            """, (song.id, song.title, song.artist, song.file_path, meta_json))
             return True
         except PostgresError as e:
-            self.logger.error(f"PostgreSQL song addition error: {e}")
+            self.logger.error(f"PostgreSQL song addition error: {e} | Context: {{'song_id': song.id}}")
             return False
     
     def add_fingerprints(self, song_id: str, fingerprints: List[Fingerprint]) -> bool:
@@ -183,7 +188,7 @@ class PostgreSQLBackend(DatabaseBackend):
             
             return True
         except PostgresError as e:
-            self.logger.error(f"PostgreSQL fingerprint addition error: {e}")
+            self.logger.error(f"PostgreSQL fingerprint addition error: {e} | Context: {{'song_id': song_id, 'count': len(fingerprints)}}")
             return False
     
     def search_fingerprints(self, query_fingerprints: List[Fingerprint]) -> Dict[str, List[Tuple[float, float]]]:
@@ -229,14 +234,20 @@ class PostgreSQLBackend(DatabaseBackend):
         try:
             cursor = self.connection.cursor()
             cursor.execute("""
-                SELECT id, title, artist, file_path, created_at
+                SELECT id, title, artist, file_path, created_at, meta
                 FROM songs
                 WHERE id = %s
             """, (song_id,))
             
             row = cursor.fetchone()
             if row:
-                return Song(row[0], row[1], row[2], row[3], str(row[4]) if row[4] else None)
+                meta = None
+                if row[5]:
+                    try:
+                        meta = json.loads(row[5])
+                    except Exception:
+                        meta = None
+                return Song(id=row[0], title=row[1], artist=row[2], file_path=row[3], created_at=row[4], meta=meta)
         except PostgresError as e:
             self.logger.error(f"PostgreSQL song retrieval error: {e}")
         
@@ -248,13 +259,19 @@ class PostgreSQLBackend(DatabaseBackend):
         try:
             cursor = self.connection.cursor()
             cursor.execute("""
-                SELECT id, title, artist, file_path, created_at
+                SELECT id, title, artist, file_path, created_at, meta
                 FROM songs
                 ORDER BY title, artist
             """)
             
             for row in cursor.fetchall():
-                songs.append(Song(row[0], row[1], row[2], row[3], str(row[4]) if row[4] else None))
+                meta = None
+                if row[5]:
+                    try:
+                        meta = json.loads(row[5])
+                    except Exception:
+                        meta = None
+                songs.append(Song(id=row[0], title=row[1], artist=row[2], file_path=row[3], created_at=row[4], meta=meta))
         except PostgresError as e:
             self.logger.error(f"PostgreSQL song list retrieval error: {e}")
         
@@ -288,7 +305,7 @@ class PostgreSQLBackend(DatabaseBackend):
             
             return True
         except PostgresError as e:
-            self.logger.error(f"PostgreSQL song deletion error: {e}")
+            self.logger.error(f"PostgreSQL song deletion error: {e} | Context: {{'song_id': song_id}}")
             return False
 
     def get_fingerprints_by_song(self, song_id: str) -> List[Fingerprint]:

@@ -20,11 +20,38 @@ from mimizam import Fingerprint
 from mimizam import create_mimizam_postgresql
 sys.path.append(os.path.dirname(__file__))
 from test_utils import TestAudioMixin
+import json
 
 
 @unittest.skipUnless(TESTCONTAINERS_AVAILABLE, "Testcontainersが利用できません")
 class TestPostgreSQLContainers(TestAudioMixin, unittest.TestCase):
     """PostgreSQLコンテナテストと統合テスト"""
+
+    def test_add_song_with_meta(self):
+        """meta情報付き楽曲追加・取得テスト（PostgreSQL）"""
+        meta = {"genre": "jazz", "year": 2026, "tags": ["postgresql", "meta"]}
+        with PostgresContainer("postgres:15") as pg:
+            mimizam = create_mimizam_postgresql(
+                host=pg.get_container_host_ip(),
+                port=pg.get_exposed_port(5432),
+                database=pg.dbname,    # 'test'
+                username=pg.username,  # 'test'
+                password=pg.password   # 'test'
+            )
+            song_id = mimizam.add_song(
+                file_path=self.test_audio_file,
+                title="Meta Song",
+                artist="Meta Artist",
+                song_id="meta_song_pg",
+                meta_json=json.dumps(meta)
+            )
+            self.assertIsNotNone(song_id)
+            song = mimizam.get_song(song_id)
+            self.assertIsNotNone(song)
+            self.assertIsInstance(song.meta, dict)
+            self.assertEqual(song.meta["genre"], "jazz")
+            self.assertEqual(song.meta["year"], 2026)
+            self.assertIn("postgresql", song.meta["tags"])
     
     def setUp(self):
         """各テストの前に実行される準備"""

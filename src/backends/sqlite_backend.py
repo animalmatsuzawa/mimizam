@@ -2,6 +2,8 @@
 
 from typing import List, Optional, Dict, Tuple
 from ..database_base import DatabaseBackend, DatabaseConfig, Song, Fingerprint
+from ..exceptions import ConnectionError, QueryError
+import json
 
 try:
     import sqlite3
@@ -42,7 +44,7 @@ class SQLiteBackend(DatabaseBackend):
             self.logger.info(f"Connected to SQLite database with optimization settings: {self.db_path}")
             return True
         except Exception as e:
-            self.logger.error(f"SQLite connection error: {e}")
+            self.logger.error(f"SQLite connection error: {e} | Context: {{'db_path': self.db_path}}")
             return False
     
     def disconnect(self) -> None:
@@ -63,6 +65,7 @@ class SQLiteBackend(DatabaseBackend):
                     title TEXT NOT NULL,
                     artist TEXT NOT NULL,
                     file_path TEXT NOT NULL,
+                    meta TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
@@ -110,14 +113,15 @@ class SQLiteBackend(DatabaseBackend):
         """SQLiteに楽曲を追加"""
         try:
             cursor = self.connection.cursor()
+            meta_json = json.dumps(song.meta, ensure_ascii=False) if song.meta else None
             cursor.execute("""
-                INSERT OR REPLACE INTO songs (id, title, artist, file_path)
-                VALUES (?, ?, ?, ?)
-            """, (song.id, song.title, song.artist, song.file_path))
+                INSERT OR REPLACE INTO songs (id, title, artist, file_path, meta)
+                VALUES (?, ?, ?, ?, ?)
+            """, (song.id, song.title, song.artist, song.file_path, meta_json))
             self.connection.commit()
             return True
         except Exception as e:
-            self.logger.error(f"SQLite song addition error: {e}")
+            self.logger.error(f"SQLite song addition error: {e} | Context: {{'song_id': '{song.id}'}}")
             return False
     
     def add_fingerprints(self, song_id: str, fingerprints: List[Fingerprint]) -> bool:
@@ -142,7 +146,7 @@ class SQLiteBackend(DatabaseBackend):
             self.connection.commit()
             return True
         except Exception as e:
-            self.logger.error(f"SQLite fingerprint addition error: {e}")
+            self.logger.error(f"SQLite fingerprint addition error: {e} | Context: {{'song_id': '{song_id}', 'count': {len(fingerprints)}}}")
             return False
     
     def search_fingerprints(self, query_fingerprints: List[Fingerprint]) -> Dict[str, List[Tuple[float, float]]]:
@@ -188,14 +192,20 @@ class SQLiteBackend(DatabaseBackend):
         try:
             cursor = self.connection.cursor()
             cursor.execute("""
-                SELECT id, title, artist, file_path, created_at
+                SELECT id, title, artist, file_path, created_at, meta
                 FROM songs
                 WHERE id = ?
             """, (song_id,))
             
             row = cursor.fetchone()
             if row:
-                return Song(*row)
+                meta = None
+                if row[5]:
+                    try:
+                        meta = json.loads(row[5])
+                    except Exception:
+                        meta = None
+                return Song(id=row[0], title=row[1], artist=row[2], file_path=row[3], created_at=row[4], meta=meta)
         except Exception as e:
             self.logger.error(f"SQLite song retrieval error: {e}")
         
@@ -207,13 +217,19 @@ class SQLiteBackend(DatabaseBackend):
         try:
             cursor = self.connection.cursor()
             cursor.execute("""
-                SELECT id, title, artist, file_path, created_at
+                SELECT id, title, artist, file_path, created_at, meta
                 FROM songs
                 ORDER BY title, artist
             """)
             
             for row in cursor.fetchall():
-                songs.append(Song(*row))
+                meta = None
+                if row[5]:
+                    try:
+                        meta = json.loads(row[5])
+                    except Exception:
+                        meta = None
+                songs.append(Song(id=row[0], title=row[1], artist=row[2], file_path=row[3], created_at=row[4], meta=meta))
         except Exception as e:
             self.logger.error(f"SQLite song list retrieval error: {e}")
         
@@ -251,7 +267,7 @@ class SQLiteBackend(DatabaseBackend):
             self.connection.commit()
             return True
         except Exception as e:
-            self.logger.error(f"SQLite song deletion error: {e}")
+            self.logger.error(f"SQLite song deletion error: {e} | Context: {{'song_id': '{song_id}'}}")
             return False
 
     def get_fingerprints_by_song(self, song_id: str) -> List[Fingerprint]:

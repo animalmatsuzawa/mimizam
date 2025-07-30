@@ -6,6 +6,7 @@ Shazam-style音声指紋の生成
 
 import numpy as np
 import librosa
+from pydub import AudioSegment
 import matplotlib.pyplot as plt
 from scipy.signal import find_peaks
 from skimage.feature import peak_local_max
@@ -19,6 +20,7 @@ import logging
 import time
 from .adaptive_parameters import AdaptiveParameterTuner, PerformanceMonitor
 from .database_base import Fingerprint
+from .exceptions import AudioProcessingError, FingerprintGenerationError
 
 # Numba JIT最適化（オプション）
 try:
@@ -37,9 +39,9 @@ except ImportError:
 @dataclass
 class Peak:
     """時間-周波数領域のスペクトルピークを表現"""
-    time: float
-    frequency: float
-    amplitude: float
+    time: np.float64
+    frequency: np.float64
+    amplitude: np.float64
 
 
 @njit(cache=True, parallel=False)  # parallel=Falseに変更（順序保証のため）
@@ -102,7 +104,7 @@ class SpectrogramAnalyzer:
                  n_fft: int = 2048, 
                  hop_length: int = 512, 
                  sr: int = 22050,
-                 enable_numba_optimization: bool = True):
+                 enable_numba_optimization: bool = False):
         """
         スペクトログラム解析器を初期化
         
@@ -198,7 +200,7 @@ class SpectrogramAnalyzer:
             if debug:
                 logger.warning(f"Too few points above threshold, using adaptive threshold: {adaptive_threshold:.2f} dB")
             mask = magnitude > adaptive_threshold
-            return mask, adaptive_threshold
+            return mask, float(adaptive_threshold)
         
         return mask, min_amplitude
 
@@ -230,9 +232,9 @@ class SpectrogramAnalyzer:
                 
                 if magnitude[f_idx, t_idx] == np.max(neighborhood):
                     peak = Peak(
-                        time=times[t_idx],
-                        frequency=frequencies[f_idx],
-                        amplitude=magnitude[f_idx, t_idx]
+                        time=np.float64(times[t_idx]),
+                        frequency=np.float64(frequencies[f_idx]),
+                        amplitude=np.float64(magnitude[f_idx, t_idx])
                     )
                     peaks.append(peak)
         
@@ -245,8 +247,7 @@ class SpectrogramAnalyzer:
         
         return peaks
 
-
-    def _find_local_maxima(self, magnitude: np.ndarray, mask: np.ndarray, 
+    def _find_local_maxima(self, magnitude: np.ndarray, mask: np.ndarray,
                           frequencies: np.ndarray, times: np.ndarray,
                           peak_neighborhood_size: int, debug: bool) -> List[Peak]:
         """
@@ -265,9 +266,9 @@ class SpectrogramAnalyzer:
             # Peak オブジェクト生成（元の実装と同じ）
             peaks = [
                 Peak(
-                    time=times[t_idx], 
-                    frequency=frequencies[f_idx], 
-                    amplitude=magnitude[f_idx, t_idx]
+                    time=np.float64(times[t_idx]), 
+                    frequency=np.float64(frequencies[f_idx]), 
+                    amplitude=np.float64(magnitude[f_idx, t_idx])
                 )
                 for f_idx, t_idx in zip(peak_f_indices, peak_t_indices)
             ]
@@ -296,7 +297,7 @@ class SpectrogramAnalyzer:
                 if f_start <= f_idx < f_end and t_start <= t_idx < t_end:
                     valid.append((f_idx, t_idx))
             # Peakオブジェクトを作成
-            peaks = [Peak(time=times[t], frequency=frequencies[f], amplitude=magnitude[f, t])
+            peaks = [Peak(time=np.float64(times[t]), frequency=np.float64(frequencies[f]), amplitude=np.float64(magnitude[f, t]))
                      for f, t in valid]
             if debug:
                 logger.info(f"Candidate points: {candidates_found}")
@@ -365,7 +366,7 @@ class SpectrogramAnalyzer:
         plt.imshow(magnitude, 
                   aspect='auto', 
                   origin='lower',
-                  extent=[times[0], times[-1], frequencies[0], frequencies[-1]])
+                  extent=(float(times[0]), float(times[-1]), float(frequencies[0]), float(frequencies[-1])))
         
         plt.colorbar(label='magnitude(dB)')
         plt.xlabel('time(s)')
@@ -423,7 +424,7 @@ class HashGenerator:
         
         # ピーク密度フィルタリングを適用
         filtered_peaks = self._filter_peaks_by_density(peaks, debug)
-        sorted_peaks = sorted(filtered_peaks, key=lambda p: p.time)
+        sorted_peaks = sorted(filtered_peaks, key=lambda p: float(p.time))
         
         if debug:
             self._log_peak_info(sorted_peaks, logger)
@@ -471,6 +472,7 @@ class HashGenerator:
                                        valid_time_deltas, len(fingerprints), logger)
         
         return fingerprints
+
     def _generate_hashes_from_peaks_numpy(self, sorted_peaks: List[Peak], debug: bool, logger) -> List[Fingerprint]:
         """
             NumPyベクトル化によるハッシュ生成
@@ -529,7 +531,6 @@ class HashGenerator:
         if debug:
             self._log_generation_summary(pairs_checked, anchor_count, N, valid_time_deltas, len(fingerprints), logger)
         return fingerprints
-
     
     def _debug_anchor_info(self, i: int, anchor_peak: Peak, sorted_peaks: List[Peak], logger) -> None:
         """アンカー情報をデバッグ出力"""
@@ -643,7 +644,7 @@ class HashGenerator:
             logger.info(f"Peak count before density filtering: {len(peaks)}")
         
         # ピークを時間順にソート
-        sorted_peaks = sorted(peaks, key=lambda p: p.time)
+        sorted_peaks = sorted(peaks, key=lambda p: float(p.time))
         
         # 最小間隔に基づくフィルタリング
         filtered_peaks = []
@@ -726,7 +727,19 @@ class AudioFingerprinter:
             self.parameter_tuner = None
             self.performance_monitor = None
         
-
+    def load_audio_with_pydub(self, file_path: str ) -> np.ndarray:
+        audio = AudioSegment.from_file(file_path)
+        # モノラル化
+        audio = audio.set_channels(1)
+        # サンプリングレート変換
+        if self.sr and audio.frame_rate != self.sr:
+            audio = audio.set_frame_rate(self.sr)
+        # NumPy配列へ変換
+        samples = np.array(audio.get_array_of_samples()).astype(np.float32)
+        # 正規化（16bitの場合）
+        if audio.sample_width == 2:
+            samples /= 32768.0
+        return samples
     
     def load_audio(self, file_path: str) -> np.ndarray:
         """
@@ -739,6 +752,7 @@ class AudioFingerprinter:
             numpy配列としての音声信号
         """
         audio, _ = librosa.load(file_path, sr=self.sr)
+        #audio = self.load_audio_with_pydub(file_path)
         return audio
     
     def fingerprint_audio(self, audio: np.ndarray, debug: bool = False) -> List[Fingerprint]:
@@ -865,9 +879,9 @@ class AudioFingerprinter:
             audio = self.load_audio(file_path)
             return self.fingerprint_audio(audio, debug)
         except Exception as e:
-            if debug:
-                logger.error(f"Error processing audio file {file_path}: {e}")
-            raise
+            error_msg = f"Error processing audio file {file_path}"
+            logger.error(f"{error_msg}: {e}")
+            raise AudioProcessingError(error_msg, e)
     
     def visualize_analysis(self, audio: np.ndarray, title: str = "voice analysis") -> None:
         """

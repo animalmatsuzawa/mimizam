@@ -2,6 +2,8 @@
 
 from typing import List, Optional, Dict, Tuple
 from ..database_base import DatabaseBackend, DatabaseConfig, Song, Fingerprint
+from ..exceptions import ConnectionError, QueryError
+import json
 
 try:
     import mysql.connector
@@ -66,7 +68,7 @@ class MySQLBackend(DatabaseBackend):
             self.logger.info(f"Connected to MySQL database: {self.config.host}:{self.config.port}")
             return True
         except MySQLError as e:
-            self.logger.error(f"MySQL connection error: {e}")
+            self.logger.error(f"MySQL connection error: {e} | Context: {{'host': self.config.host, 'port': self.config.port}}")
             return False
     
     def disconnect(self) -> None:
@@ -87,6 +89,7 @@ class MySQLBackend(DatabaseBackend):
                     title VARCHAR(500) NOT NULL,
                     artist VARCHAR(500) NOT NULL,
                     file_path TEXT NOT NULL,
+                    meta TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 ) ENGINE=InnoDB CHARACTER SET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             """)
@@ -139,17 +142,19 @@ class MySQLBackend(DatabaseBackend):
         """MySQLに楽曲を追加"""
         try:
             cursor = self.connection.cursor()
+            meta_json = json.dumps(song.meta, ensure_ascii=False) if song.meta else None
             cursor.execute("""
-                INSERT INTO songs (id, title, artist, file_path)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO songs (id, title, artist, file_path, meta)
+                VALUES (%s, %s, %s, %s, %s)
                 ON DUPLICATE KEY UPDATE
                 title = VALUES(title),
                 artist = VALUES(artist),
-                file_path = VALUES(file_path)
-            """, (song.id, song.title, song.artist, song.file_path))
+                file_path = VALUES(file_path),
+                meta = VALUES(meta)
+            """, (song.id, song.title, song.artist, song.file_path, meta_json))
             return True
         except MySQLError as e:
-            self.logger.error(f"MySQL song addition error: {e}")
+            self.logger.error(f"MySQL song addition error: {e} | Context: {{'song_id': song.id}}")
             return False
     
     def add_fingerprints(self, song_id: str, fingerprints: List[Fingerprint]) -> bool:
@@ -173,7 +178,7 @@ class MySQLBackend(DatabaseBackend):
             
             return True
         except MySQLError as e:
-            self.logger.error(f"MySQL fingerprint addition error: {e}")
+            self.logger.error(f"MySQL fingerprint addition error: {e} | Context: {{'song_id': song_id, 'count': len(fingerprints)}}")
             return False
     
     def search_fingerprints(self, query_fingerprints: List[Fingerprint]) -> Dict[str, List[Tuple[float, float]]]:
@@ -219,14 +224,19 @@ class MySQLBackend(DatabaseBackend):
         try:
             cursor = self.connection.cursor()
             cursor.execute("""
-                SELECT id, title, artist, file_path, created_at
+                SELECT id, title, artist, file_path, created_at, meta
                 FROM songs
                 WHERE id = %s
             """, (song_id,))
-            
             row = cursor.fetchone()
             if row:
-                return Song(row[0], row[1], row[2], row[3], str(row[4]) if row[4] else None)
+                meta = None
+                if row[5]:
+                    try:
+                        meta = json.loads(row[5])
+                    except Exception:
+                        meta = None
+                return Song(id=row[0], title=row[1], artist=row[2], file_path=row[3], created_at=row[4], meta=meta)
         except MySQLError as e:
             self.logger.error(f"MySQL song retrieval error: {e}")
         
@@ -238,13 +248,19 @@ class MySQLBackend(DatabaseBackend):
         try:
             cursor = self.connection.cursor()
             cursor.execute("""
-                SELECT id, title, artist, file_path, created_at
+                SELECT id, title, artist, file_path, created_at, meta
                 FROM songs
                 ORDER BY title, artist
             """)
             
             for row in cursor.fetchall():
-                songs.append(Song(row[0], row[1], row[2], row[3], str(row[4]) if row[4] else None))
+                meta = None
+                if row[5]:
+                    try:
+                        meta = json.loads(row[5])
+                    except Exception:
+                        meta = None
+                songs.append(Song(id=row[0], title=row[1], artist=row[2], file_path=row[3], created_at=row[4], meta=meta))
         except MySQLError as e:
             self.logger.error(f"MySQL song list retrieval error: {e}")
         
@@ -278,7 +294,7 @@ class MySQLBackend(DatabaseBackend):
             
             return True
         except MySQLError as e:
-            self.logger.error(f"MySQL song deletion error: {e}")
+            self.logger.error(f"MySQL song deletion error: {e} | Context: {{'song_id': song_id}}")
             return False
 
     def get_fingerprints_by_song(self, song_id: str) -> List[Fingerprint]:

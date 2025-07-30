@@ -20,11 +20,38 @@ from mimizam import Fingerprint
 from mimizam import create_mimizam_mysql
 sys.path.append(os.path.dirname(__file__))
 from test_utils import TestAudioMixin
+import json
 
 
 @unittest.skipUnless(TESTCONTAINERS_AVAILABLE, "Testcontainersが利用できません")
 class TestMySQLContainers(TestAudioMixin, unittest.TestCase):
     """MySQLコンテナテストと統合テスト"""
+
+    def test_add_song_with_meta(self):
+        """meta情報付き楽曲追加・取得テスト（MySQL）"""
+        meta = {"genre": "rock", "year": 2025, "tags": ["mysql", "meta"]}
+        with MySqlContainer("mysql:8.0") as mysql:
+            mimizam = create_mimizam_mysql(
+                host=mysql.get_container_host_ip(),
+                port=mysql.get_exposed_port(3306),
+                database=mysql.dbname,    # 'test'
+                username=mysql.username,  # 'test'
+                password=mysql.password   # 'test'
+            )
+            song_id = mimizam.add_song(
+                file_path=self.test_audio_file,
+                title="Meta Song",
+                artist="Meta Artist",
+                song_id="meta_song_mysql",
+                meta_json=json.dumps(meta)
+            )
+            self.assertIsNotNone(song_id)
+            song = mimizam.get_song(song_id)
+            self.assertIsNotNone(song)
+            self.assertIsInstance(song.meta, dict)
+            self.assertEqual(song.meta["genre"], "rock")
+            self.assertEqual(song.meta["year"], 2025)
+            self.assertIn("mysql", song.meta["tags"])
     
     def setUp(self):
         """各テストの前処理"""
