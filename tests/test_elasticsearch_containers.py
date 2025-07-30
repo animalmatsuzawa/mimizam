@@ -1,3 +1,17 @@
+def test_get_fingerprints_by_song(es_database, test_song, test_fingerprints):
+    """Elasticsearch: get_fingerprints_by_songのテスト"""
+    # 楽曲とフィンガープリントを追加
+    es_database.add_song(test_song)
+    es_database.add_fingerprints(test_song.id, test_fingerprints)
+
+    # 取得
+    result = es_database.get_fingerprints_by_song(test_song.id)
+    assert isinstance(result, list)
+    assert len(result) == len(test_fingerprints)
+    for fp, orig in zip(result, test_fingerprints):
+        assert fp.hash_value == orig.hash_value
+        assert abs(fp.time_offset - orig.time_offset) < 1e-6
+        assert fp.song_id == test_song.id
 """
 Elasticsearchコンテナを使用したインテグレーションテスト
 """

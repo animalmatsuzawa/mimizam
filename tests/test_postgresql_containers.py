@@ -1,3 +1,17 @@
+def test_get_fingerprints_by_song(pg_database, test_song, test_fingerprints):
+    """PostgreSQL: get_fingerprints_by_songのテスト"""
+    # 楽曲とフィンガープリントを追加
+    pg_database.add_song(test_song)
+    pg_database.add_fingerprints(test_song.id, test_fingerprints)
+
+    # 取得
+    result = pg_database.get_fingerprints_by_song(test_song.id)
+    assert isinstance(result, list)
+    assert len(result) == len(test_fingerprints)
+    for fp, orig in zip(result, test_fingerprints):
+        assert fp.hash_value == orig.hash_value
+        assert abs(fp.time_offset - orig.time_offset) < 1e-6
+        assert fp.song_id == test_song.id
 """
 PostgreSQLコンテナを使用したインテグレーションテスト
 """

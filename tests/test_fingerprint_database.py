@@ -181,6 +181,23 @@ class TestFingerprintDatabase(unittest.TestCase):
         
         self.mock_backend.disconnect.assert_called()
 
+    @patch('mimizam.src.fingerprint_database.create_database_backend')
+    def test_get_fingerprints_by_song(self, mock_create_backend):
+        """get_fingerprints_by_songのテスト"""
+        mock_create_backend.return_value = self.mock_backend
+        # モックの戻り値を用意
+        test_fingerprints = [
+            Fingerprint(hash_value=12345, time_offset=1.0, song_id="test_song_1"),
+            Fingerprint(hash_value=67890, time_offset=2.0, song_id="test_song_1")
+        ]
+        self.mock_backend.get_fingerprints_by_song.return_value = test_fingerprints
+
+        db = FingerprintDatabase(self.config)
+        result = db.get_fingerprints_by_song("test_song_1")
+
+        self.assertEqual(result, test_fingerprints)
+        self.mock_backend.get_fingerprints_by_song.assert_called_once_with("test_song_1")
+
 
 class TestFingerprintMatcher(unittest.TestCase):
     """FingerprintMatcher クラスのテスト"""
